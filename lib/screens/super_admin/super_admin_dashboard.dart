@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
+import 'category_management_screen.dart';
 
 class SuperAdminDashboard extends ConsumerWidget {
   const SuperAdminDashboard({super.key});
@@ -58,6 +59,19 @@ class SuperAdminDashboard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 32),
                 // Dashboard cards
+                _buildDashboardCard(
+                  context,
+                  icon: Icons.category,
+                  title: 'Manage Categories',
+                  subtitle: 'Add, edit, or delete service categories',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CategoryManagementScreen(),
+                      ),
+                    );
+                  },
+                ),
                 _buildDashboardCard(
                   context,
                   icon: Icons.approval,

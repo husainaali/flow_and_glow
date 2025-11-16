@@ -56,6 +56,23 @@ class StorageService {
     }
   }
 
+  /// Upload category icon to Firebase Storage
+  /// Returns the download URL
+  Future<String> uploadCategoryIcon(File imageFile, String categoryId) async {
+    try {
+      final fileName = 'category_${categoryId}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final ref = _storage.ref().child('categories/$fileName');
+      
+      final uploadTask = ref.putFile(imageFile);
+      final snapshot = await uploadTask.whenComplete(() {});
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      return downloadUrl;
+    } catch (e) {
+      throw Exception('Failed to upload category icon: $e');
+    }
+  }
+
   /// Delete image from Firebase Storage
   Future<void> deleteImage(String imageUrl) async {
     try {

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/center_model.dart';
 import '../models/package_model.dart';
 import '../models/subscription_model.dart';
+import '../models/category_model.dart';
+import '../models/service_model.dart';
 import '../services/firestore_service.dart';
 
 final firestoreServiceProvider = Provider<FirestoreService>((ref) => FirestoreService());
@@ -38,4 +40,22 @@ final activeSubscriptionsProvider = StreamProvider.family<List<SubscriptionModel
     userId: userId,
     status: SubscriptionStatus.active,
   );
+});
+
+// Categories
+final categoriesProvider = StreamProvider<List<CategoryModel>>((ref) {
+  return ref.watch(firestoreServiceProvider).getCategories();
+});
+
+// Services
+final servicesProvider = StreamProvider<List<ServiceModel>>((ref) {
+  return ref.watch(firestoreServiceProvider).getServices();
+});
+
+final servicesByCategoryProvider = StreamProvider.family<List<ServiceModel>, String>((ref, categoryId) {
+  return ref.watch(firestoreServiceProvider).getServices(categoryId: categoryId);
+});
+
+final servicesByCenterProvider = StreamProvider.family<List<ServiceModel>, String>((ref, centerId) {
+  return ref.watch(firestoreServiceProvider).getServices(centerId: centerId);
 });

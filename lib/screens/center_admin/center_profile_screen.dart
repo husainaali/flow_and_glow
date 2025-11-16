@@ -7,7 +7,9 @@ import '../../models/center_model.dart';
 import '../../models/trainer_model.dart';
 import '../../models/service_model.dart';
 import '../../models/package_model.dart';
+import '../../models/category_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/firestore_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 
@@ -785,6 +787,8 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     final descriptionController = TextEditingController();
     final priceController = TextEditingController();
     String? selectedTrainer;
+    String? selectedCategoryId;
+    final categoriesAsync = ref.read(categoriesProvider);
 
     showDialog(
       context: context,
@@ -811,6 +815,60 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
                   controller: priceController,
                   decoration: const InputDecoration(labelText: 'Price (BHD)'),
                   keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Select Category',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                categoriesAsync.when(
+                  data: (categories) {
+                    if (categories.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'No categories available. Contact super admin.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: categories.map((category) {
+                        final isSelected = selectedCategoryId == category.id;
+                        return ActionChip(
+                          label: Text(category.name),
+                          avatar: category.iconUrl.isNotEmpty
+                              ? CircleAvatar(
+                                  backgroundColor: Colors.transparent,
+                                  backgroundImage: NetworkImage(category.iconUrl),
+                                )
+                              : null,
+                          backgroundColor: isSelected ? AppColors.accent.withOpacity(0.2) : AppColors.secondary,
+                          side: BorderSide(
+                            color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.3),
+                            width: isSelected ? 2 : 1,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              selectedCategoryId = category.id;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
+                  loading: () => const CircularProgressIndicator(),
+                  error: (_, __) => const Text('Error loading categories'),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -879,22 +937,39 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                if (titleController.text.isNotEmpty && selectedTrainer != null) {
-                  setState(() {
-                    _services.add(ServiceModel(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      title: titleController.text,
-                      description: descriptionController.text,
-                      price: double.tryParse(priceController.text) ?? 0.0,
-                      trainer: selectedTrainer!,
-                    ));
-                  });
-                  Navigator.pop(context);
-                } else if (selectedTrainer == null) {
+                if (titleController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a title')),
+                  );
+                  return;
+                }
+                if (selectedCategoryId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select a category')),
+                  );
+                  return;
+                }
+                if (selectedTrainer == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please select a trainer')),
                   );
+                  return;
                 }
+                
+                final user = ref.read(currentUserProvider).value;
+                setState(() {
+                  _services.add(ServiceModel(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    centerId: user?.centerId ?? '',
+                    categoryId: selectedCategoryId!,
+                    title: titleController.text,
+                    description: descriptionController.text,
+                    price: double.tryParse(priceController.text) ?? 0.0,
+                    trainer: selectedTrainer!,
+                    createdAt: DateTime.now(),
+                  ));
+                });
+                Navigator.pop(context);
               },
               child: const Text('Add'),
             ),
@@ -1007,10 +1082,13 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
                   setState(() {
                     _services[index] = ServiceModel(
                       id: service.id,
+                      centerId: service.centerId,
+                      categoryId: service.categoryId,
                       title: titleController.text,
                       description: descriptionController.text,
                       price: double.tryParse(priceController.text) ?? 0.0,
                       trainer: selectedTrainer!,
+                      createdAt: service.createdAt,
                     );
                   });
                   Navigator.pop(context);

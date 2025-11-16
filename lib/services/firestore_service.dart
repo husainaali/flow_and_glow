@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/center_model.dart';
 import '../models/package_model.dart';
 import '../models/subscription_model.dart';
+import '../models/category_model.dart';
+import '../models/service_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -95,5 +97,73 @@ class FirestoreService {
 
   Future<void> updateSubscription(String subscriptionId, Map<String, dynamic> data) async {
     await _firestore.collection('subscriptions').doc(subscriptionId).update(data);
+  }
+
+  // Categories
+  Stream<List<CategoryModel>> getCategories() {
+    return _firestore
+        .collection('categories')
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => CategoryModel.fromFirestore(doc)).toList());
+  }
+
+  Future<CategoryModel?> getCategory(String categoryId) async {
+    final doc = await _firestore.collection('categories').doc(categoryId).get();
+    if (doc.exists) {
+      return CategoryModel.fromFirestore(doc);
+    }
+    return null;
+  }
+
+  Future<String> createCategory(CategoryModel category) async {
+    final docRef = await _firestore.collection('categories').add(category.toFirestore());
+    return docRef.id;
+  }
+
+  Future<void> updateCategory(String categoryId, Map<String, dynamic> data) async {
+    await _firestore.collection('categories').doc(categoryId).update(data);
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    await _firestore.collection('categories').doc(categoryId).delete();
+  }
+
+  // Services
+  Stream<List<ServiceModel>> getServices({String? centerId, String? categoryId}) {
+    Query query = _firestore.collection('services');
+    
+    if (centerId != null) {
+      query = query.where('centerId', isEqualTo: centerId);
+    }
+    
+    if (categoryId != null) {
+      query = query.where('categoryId', isEqualTo: categoryId);
+    }
+    
+    return query.snapshots().map((snapshot) =>
+        snapshot.docs.map((doc) => ServiceModel.fromFirestore(doc)).toList());
+  }
+
+  Future<ServiceModel?> getService(String serviceId) async {
+    final doc = await _firestore.collection('services').doc(serviceId).get();
+    if (doc.exists) {
+      return ServiceModel.fromFirestore(doc);
+    }
+    return null;
+  }
+
+  Future<String> createService(ServiceModel service) async {
+    final docRef = await _firestore.collection('services').add(service.toFirestore());
+    return docRef.id;
+  }
+
+  Future<void> updateService(String serviceId, Map<String, dynamic> data) async {
+    await _firestore.collection('services').doc(serviceId).update(data);
+  }
+
+  Future<void> deleteService(String serviceId) async {
+    await _firestore.collection('services').doc(serviceId).delete();
   }
 }

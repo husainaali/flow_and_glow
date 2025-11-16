@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
-import '../../models/package_model.dart';
 import '../../models/center_model.dart';
+import '../../models/category_model.dart';
+import '../../models/service_model.dart';
 import '../../providers/firestore_provider.dart';
 import '../../providers/auth_provider.dart';
-import 'package_detail_screen.dart';
 import 'centers_screen.dart';
 import 'subscriptions_screen.dart';
 import 'profile_screen.dart';
@@ -19,7 +19,6 @@ class CustomerHomeScreen extends ConsumerStatefulWidget {
 
 class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
   int _selectedIndex = 0;
-  PackageCategory? _selectedCategory;
 
   final List<Widget> _screens = [
     const _HomeTab(),
@@ -77,7 +76,7 @@ class _HomeTab extends ConsumerStatefulWidget {
 }
 
 class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderStateMixin {
-  PackageCategory? _selectedCategory;
+  String? _selectedCategoryId;
   late TabController _tabController;
 
   @override
@@ -95,9 +94,10 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     final currentUserAsync = ref.watch(currentUserProvider);
-    final packagesAsync = _selectedCategory == null
-        ? ref.watch(packagesProvider)
-        : ref.watch(packagesByCategoryProvider(_selectedCategory!));
+    final categoriesAsync = ref.watch(categoriesProvider);
+    final servicesAsync = _selectedCategoryId == null
+        ? ref.watch(servicesProvider)
+        : ref.watch(servicesByCategoryProvider(_selectedCategoryId!));
     final centersAsync = ref.watch(centersProvider(null)); // Show all centers
 
     return SafeArea(
@@ -211,7 +211,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
               controller: _tabController,
               children: [
                 // Services Tab
-                _buildServicesTab(packagesAsync),
+                _buildServicesTab(categoriesAsync, servicesAsync),
                 // Centers Tab
                 _buildCentersTab(centersAsync),
               ],
@@ -222,47 +222,70 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
     );
   }
 
-  Widget _buildServicesTab(AsyncValue<List<PackageModel>> packagesAsync) {
-    return packagesAsync.when(
-      data: (packages) {
-        if (packages.isEmpty) {
-          return const Center(
-            child: Text('No packages available'),
-          );
-        }
-        return Column(
-          children: [
-            // Category filter chips
-            SingleChildScrollView(
+  Widget _buildServicesTab(
+    AsyncValue<List<CategoryModel>> categoriesAsync,
+    AsyncValue<List<ServiceModel>> servicesAsync,
+  ) {
+    return Column(
+      children: [
+        // Category filter chips
+        categoriesAsync.when(
+          data: (categories) {
+            if (categories.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'No categories available',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              );
+            }
+            return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  _buildCategoryChip('All', null),
-                  _buildCategoryChip('Yoga', PackageCategory.yoga),
-                  _buildCategoryChip('Pilates', PackageCategory.pilates),
-                  _buildCategoryChip('Nutrition', PackageCategory.nutrition),
-                  _buildCategoryChip('Therapy', PackageCategory.therapy),
+                  _buildCategoryChip('All', null, null),
+                  ...categories.map((category) => 
+                    _buildCategoryChip(category.name, category.id, category.iconUrl)
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            // Packages list
-            Expanded(
-              child: ListView.builder(
+            );
+          },
+          loading: () => const Padding(
+            padding: EdgeInsets.all(20),
+            child: CircularProgressIndicator(),
+          ),
+          error: (_, __) => const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('Error loading categories'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Services list
+        Expanded(
+          child: servicesAsync.when(
+            data: (services) {
+              if (services.isEmpty) {
+                return const Center(
+                  child: Text('No services available'),
+                );
+              }
+              return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: packages.length,
+                itemCount: services.length,
                 itemBuilder: (context, index) {
-                  final package = packages[index];
-                  return _buildPackageCard(package);
+                  final service = services[index];
+                  return _buildServiceCard(service);
                 },
-              ),
-            ),
-          ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Error: $error')),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(child: Text('Error: $error')),
+          ),
+        ),
+      ],
     );
   }
 
@@ -288,14 +311,14 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
     );
   }
 
-  Widget _buildCategoryChip(String label, PackageCategory? category) {
-    final isSelected = _selectedCategory == category;
+  Widget _buildCategoryChip(String label, String? categoryId, String? iconUrl) {
+    final isSelected = _selectedCategoryId == categoryId;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: GestureDetector(
         onTap: () {
           setState(() {
-            _selectedCategory = category;
+            _selectedCategoryId = categoryId;
           });
         },
         child: Container(
@@ -309,11 +332,23 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
           ),
           child: Row(
             children: [
-              Icon(
-                _getCategoryIcon(category),
-                size: 20,
-                color: isSelected ? AppColors.white : AppColors.textSecondary,
-              ),
+              if (iconUrl != null && iconUrl.isNotEmpty)
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: NetworkImage(iconUrl),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                )
+              else
+                Icon(
+                  Icons.apps,
+                  size: 20,
+                  color: isSelected ? AppColors.white : AppColors.textSecondary,
+                ),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -329,31 +364,12 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
     );
   }
 
-  IconData _getCategoryIcon(PackageCategory? category) {
-    switch (category) {
-      case PackageCategory.yoga:
-        return Icons.self_improvement;
-      case PackageCategory.pilates:
-        return Icons.fitness_center;
-      case PackageCategory.nutrition:
-        return Icons.restaurant;
-      case PackageCategory.therapy:
-        return Icons.psychology;
-      default:
-        return Icons.apps;
-    }
-  }
-
-  Widget _buildPackageCard(PackageModel package) {
+  Widget _buildServiceCard(ServiceModel service) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PackageDetailScreen(package: package),
-            ),
-          );
+          // TODO: Navigate to service detail screen
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -361,7 +377,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                package.title,
+                service.title,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -370,26 +386,30 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
               ),
               const SizedBox(height: 4),
               Text(
-                'by ${package.instructor}',
+                'by ${service.trainer}',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                '${package.sessionsPerWeek} Days/week',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
+              if (service.description.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  service.description,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
+              ],
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${package.price} ${package.currency}/month',
+                    'BHD ${service.price.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -398,16 +418,12 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
                   ),
                   ElevatedButton(
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PackageDetailScreen(package: package),
-                        ),
-                      );
+                      // TODO: Navigate to service detail or booking screen
                     },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                     ),
-                    child: const Text('View'),
+                    child: const Text('Book'),
                   ),
                 ],
               ),
