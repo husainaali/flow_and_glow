@@ -1,0 +1,30 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "flow-and-glow-feddd",
+                    "appId": "1:520813948225:android:497d909c9e49ce2d2385c0",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "ios": {
+                "default": {
+                    "projectId": "flow-and-glow-feddd",
+                    "appId": "1:520813948225:ios:259465bb2d8ad4252385c0",
+                    "uploadDebugSymbols": false,
+                    "fileOutput": "ios/Runner/GoogleService-Info.plist"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "flow-and-glow-feddd",
+                    "configurations": {
+                        "android": "1:520813948225:android:497d909c9e49ce2d2385c0",
+                        "ios": "1:520813948225:ios:259465bb2d8ad4252385c0"
+                    }
+                }
+            }
+        }
+    }
+}

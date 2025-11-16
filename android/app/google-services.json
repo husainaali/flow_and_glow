@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "520813948225",
+    "project_id": "flow-and-glow-feddd",
+    "storage_bucket": "flow-and-glow-feddd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:520813948225:android:497d909c9e49ce2d2385c0",
+        "android_client_info": {
+          "package_name": "com.example.flow_and_glow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3DVEwv3fwjkQI54rGA6HB5xHnPUYUkp8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
