@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
 import '../../providers/firestore_provider.dart';
+import 'center_detail_screen.dart';
 
 class CentersScreen extends ConsumerWidget {
   const CentersScreen({super.key});
@@ -27,7 +28,7 @@ class CentersScreen extends ConsumerWidget {
             itemCount: centers.length,
             itemBuilder: (context, index) {
               final center = centers[index];
-              return _buildCenterCard(center);
+              return _buildCenterCard(context, center);
             },
           );
         },
@@ -37,12 +38,22 @@ class CentersScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCenterCard(CenterModel center) {
+  Widget _buildCenterCard(BuildContext context, CenterModel center) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CenterDetailScreen(center: center),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Center image
           Container(
             height: 180,
@@ -120,7 +131,8 @@ class CentersScreen extends ConsumerWidget {
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -28,8 +28,22 @@ class FirestoreService {
     return null;
   }
 
-  Future<void> createCenter(CenterModel center) async {
-    await _firestore.collection('centers').add(center.toFirestore());
+  Future<CenterModel?> getCenterByAdminId(String adminId) async {
+    final querySnapshot = await _firestore
+        .collection('centers')
+        .where('adminId', isEqualTo: adminId)
+        .limit(1)
+        .get();
+    
+    if (querySnapshot.docs.isNotEmpty) {
+      return CenterModel.fromFirestore(querySnapshot.docs.first);
+    }
+    return null;
+  }
+
+  Future<String> createCenter(CenterModel center) async {
+    final docRef = await _firestore.collection('centers').add(center.toFirestore());
+    return docRef.id;
   }
 
   Future<void> updateCenter(String centerId, Map<String, dynamic> data) async {

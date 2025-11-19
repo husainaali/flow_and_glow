@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
@@ -12,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
+import 'add_service_dialog.dart';
 
 class CenterProfileScreen extends ConsumerStatefulWidget {
   const CenterProfileScreen({super.key});
@@ -28,6 +30,7 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
   final _centerNameController = TextEditingController();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _addressController = TextEditingController();
   
   // Trainers
   List<TrainerModel> _trainers = [];
@@ -54,28 +57,46 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     
     try {
       final user = ref.read(currentUserProvider).value;
-      if (user?.centerId != null) {
-        final center = await _firestoreService.getCenter(user!.centerId!);
-        if (center != null) {
-          setState(() {
-            _currentCenter = center;
-            _centerNameController.text = center.name;
-            _titleController.text = center.title ?? '';
-            _descriptionController.text = center.description;
-            _centerImageUrl = center.imageUrl;
-            _trainers = List.from(center.trainers);
-            _services = List.from(center.services);
-          });
-        }
+      if (user == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      CenterModel? center;
+      
+      // First try to get center by centerId if available
+      if (user.centerId != null && user.centerId!.isNotEmpty) {
+        center = await _firestoreService.getCenter(user.centerId!);
+      }
+      
+      // If no center found by centerId, try to find by adminId
+      if (center == null) {
+        center = await _firestoreService.getCenterByAdminId(user.uid);
+      }
+      
+      if (center != null && mounted) {
+        setState(() {
+          _currentCenter = center;
+          _centerNameController.text = center!.name;
+          _titleController.text = center.title ?? '';
+          _descriptionController.text = center.description;
+          _addressController.text = center.address;
+          _centerImageUrl = center.imageUrl;
+          _trainers = List.from(center.trainers);
+          _services = List.from(center.services);
+        });
       }
     } catch (e) {
+      print('Error loading center data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading center data: $e')),
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -94,7 +115,7 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
           name: _centerNameController.text.trim(),
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
-          address: '',
+          address: _addressController.text.trim(),
           imageUrl: _centerImageUrl ?? '',
           status: CenterStatus.pending,
           adminId: user!.uid,
@@ -102,7 +123,13 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
           trainers: _trainers,
           services: _services,
         );
-        await _firestoreService.createCenter(newCenter);
+        final centerId = await _firestoreService.createCenter(newCenter);
+        
+        // Update user's centerId
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'centerId': centerId});
       } else {
         // Update existing center
         await _firestoreService.updateCenter(
@@ -111,6 +138,7 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
             'name': _centerNameController.text.trim(),
             'title': _titleController.text.trim(),
             'description': _descriptionController.text.trim(),
+            'address': _addressController.text.trim(),
             'imageUrl': _centerImageUrl ?? '',
             'trainers': _trainers.map((t) => t.toMap()).toList(),
             'services': _services.map((s) => s.toMap()).toList(),
@@ -135,16 +163,62 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickHeaderImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
     
     if (pickedFile != null) {
-      // TODO: Upload to Firebase Storage
-      // For now, just store the local path
-      setState(() {
-        _centerImageUrl = pickedFile.path;
-      });
+      // Upload to Firebase Storage
+      try {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Uploading header image...'),
+              ],
+            ),
+          ),
+        );
+        
+        final storageService = StorageService();
+        final centerId = _currentCenter?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+        final imageUrl = await storageService.uploadCenterImage(
+          File(pickedFile.path),
+          centerId,
+        );
+        
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          setState(() {
+            _centerImageUrl = imageUrl;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Header image uploaded successfully!')),
+          );
+        }
+      } catch (e) {
+        print('Error uploading header image: $e');
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          // Fallback to local path if upload fails
+          setState(() {
+            _centerImageUrl = pickedFile.path;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Using local image: ${e.toString()}')),
+          );
+        }
+      }
     }
   }
 
@@ -189,6 +263,11 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
               
               _buildSectionTitle('Center Details'),
               const SizedBox(height: 16),
+              
+              // Header Photo
+              _buildHeaderPhotoSection(),
+              const SizedBox(height: 16),
+              
               _buildTextField(
                 controller: _centerNameController,
                 label: 'Center Name',
@@ -206,6 +285,13 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
                 label: 'Description',
                 hint: 'Discover your inner strength and tranquility...',
                 maxLines: 4,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _addressController,
+                label: 'Address',
+                hint: 'e.g., Building 123, Road 456, Manama',
+                maxLines: 2,
               ),
               const SizedBox(height: 32),
               
@@ -250,6 +336,69 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
         fontWeight: FontWeight.bold,
         color: AppColors.textPrimary,
       ),
+    );
+  }
+
+  Widget _buildHeaderPhotoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Header Photo',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _pickHeaderImage,
+          child: Container(
+            width: double.infinity,
+            height: 180,
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.primary.withOpacity(0.3),
+                width: 2,
+              ),
+            ),
+            child: _centerImageUrl != null && _centerImageUrl!.isNotEmpty
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _centerImageUrl!.startsWith('http')
+                        ? Image.network(
+                            _centerImageUrl!,
+                            fit: BoxFit.cover,
+                          )
+                        : Image.file(
+                            File(_centerImageUrl!),
+                            fit: BoxFit.cover,
+                          ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate,
+                        size: 48,
+                        color: AppColors.primary.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap to add header photo',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -782,328 +931,38 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
   }
 
   // Service Dialogs
-  void _showAddServiceDialog() {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    final priceController = TextEditingController();
-    String? selectedTrainer;
-    String? selectedCategoryId;
-    final categoriesAsync = ref.read(categoriesProvider);
-
-    showDialog(
+  Future<void> _showAddServiceDialog() async {
+    final user = ref.read(currentUserProvider).value;
+    final result = await showDialog<ServiceModel>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Service'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: priceController,
-                  decoration: const InputDecoration(labelText: 'Price (BHD)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Category',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                categoriesAsync.when(
-                  data: (categories) {
-                    if (categories.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text(
-                          'No categories available. Contact super admin.',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    }
-                    return Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: categories.map((category) {
-                        final isSelected = selectedCategoryId == category.id;
-                        return ActionChip(
-                          label: Text(category.name),
-                          avatar: category.iconUrl.isNotEmpty
-                              ? CircleAvatar(
-                                  backgroundColor: Colors.transparent,
-                                  backgroundImage: NetworkImage(category.iconUrl),
-                                )
-                              : null,
-                          backgroundColor: isSelected ? AppColors.accent.withOpacity(0.2) : AppColors.secondary,
-                          side: BorderSide(
-                            color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.3),
-                            width: isSelected ? 2 : 1,
-                          ),
-                          onPressed: () {
-                            setDialogState(() {
-                              selectedCategoryId = category.id;
-                            });
-                          },
-                        );
-                      }).toList(),
-                    );
-                  },
-                  loading: () => const CircularProgressIndicator(),
-                  error: (_, __) => const Text('Error loading categories'),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Trainer',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_trainers.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      'No trainers added yet. Please add trainers first.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _trainers.map((trainer) {
-                      final isSelected = selectedTrainer == trainer.name;
-                      return ActionChip(
-                        label: Text(trainer.name),
-                        avatar: CircleAvatar(
-                          backgroundColor: isSelected ? AppColors.accent : AppColors.secondary,
-                          backgroundImage: trainer.imageUrl.isNotEmpty
-                              ? (trainer.imageUrl.startsWith('http')
-                                  ? NetworkImage(trainer.imageUrl)
-                                  : FileImage(File(trainer.imageUrl)) as ImageProvider)
-                              : null,
-                          child: trainer.imageUrl.isEmpty
-                              ? Icon(
-                                  Icons.person,
-                                  size: 16,
-                                  color: isSelected ? AppColors.white : AppColors.primary,
-                                )
-                              : null,
-                        ),
-                        backgroundColor: isSelected ? AppColors.accent.withOpacity(0.2) : AppColors.secondary,
-                        side: BorderSide(
-                          color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.3),
-                          width: isSelected ? 2 : 1,
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            selectedTrainer = trainer.name;
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (titleController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a title')),
-                  );
-                  return;
-                }
-                if (selectedCategoryId == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please select a category')),
-                  );
-                  return;
-                }
-                if (selectedTrainer == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please select a trainer')),
-                  );
-                  return;
-                }
-                
-                final user = ref.read(currentUserProvider).value;
-                setState(() {
-                  _services.add(ServiceModel(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    centerId: user?.centerId ?? '',
-                    categoryId: selectedCategoryId!,
-                    title: titleController.text,
-                    description: descriptionController.text,
-                    price: double.tryParse(priceController.text) ?? 0.0,
-                    trainer: selectedTrainer!,
-                    createdAt: DateTime.now(),
-                  ));
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
+      builder: (context) => AddServiceDialog(
+        trainers: _trainers,
+        centerId: user?.centerId ?? _currentCenter?.id ?? '',
       ),
     );
+    
+    if (result != null) {
+      setState(() {
+        _services.add(result);
+      });
+    }
   }
 
-  void _showEditServiceDialog(int index, ServiceModel service) {
-    final titleController = TextEditingController(text: service.title);
-    final descriptionController = TextEditingController(text: service.description);
-    final priceController = TextEditingController(text: service.price.toString());
-    String? selectedTrainer = service.trainer;
-
-    showDialog(
+  Future<void> _showEditServiceDialog(int index, ServiceModel service) async {
+    final result = await showDialog<ServiceModel>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Service'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: priceController,
-                  decoration: const InputDecoration(labelText: 'Price (BHD)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Select Trainer',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_trainers.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      'No trainers added yet. Please add trainers first.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _trainers.map((trainer) {
-                      final isSelected = selectedTrainer == trainer.name;
-                      return ActionChip(
-                        label: Text(trainer.name),
-                        avatar: CircleAvatar(
-                          backgroundColor: isSelected ? AppColors.accent : AppColors.secondary,
-                          backgroundImage: trainer.imageUrl.isNotEmpty
-                              ? (trainer.imageUrl.startsWith('http')
-                                  ? NetworkImage(trainer.imageUrl)
-                                  : FileImage(File(trainer.imageUrl)) as ImageProvider)
-                              : null,
-                          child: trainer.imageUrl.isEmpty
-                              ? Icon(
-                                  Icons.person,
-                                  size: 16,
-                                  color: isSelected ? AppColors.white : AppColors.primary,
-                                )
-                              : null,
-                        ),
-                        backgroundColor: isSelected ? AppColors.accent.withOpacity(0.2) : AppColors.secondary,
-                        side: BorderSide(
-                          color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.3),
-                          width: isSelected ? 2 : 1,
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            selectedTrainer = trainer.name;
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (titleController.text.isNotEmpty && selectedTrainer != null) {
-                  setState(() {
-                    _services[index] = ServiceModel(
-                      id: service.id,
-                      centerId: service.centerId,
-                      categoryId: service.categoryId,
-                      title: titleController.text,
-                      description: descriptionController.text,
-                      price: double.tryParse(priceController.text) ?? 0.0,
-                      trainer: selectedTrainer!,
-                      createdAt: service.createdAt,
-                    );
-                  });
-                  Navigator.pop(context);
-                } else if (selectedTrainer == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please select a trainer')),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+      builder: (context) => AddServiceDialog(
+        existingService: service,
+        trainers: _trainers,
+        centerId: service.centerId,
       ),
     );
+    
+    if (result != null) {
+      setState(() {
+        _services[index] = result;
+      });
+    }
   }
 
   void _deleteService(int index) {
@@ -1283,6 +1142,7 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     _centerNameController.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 }

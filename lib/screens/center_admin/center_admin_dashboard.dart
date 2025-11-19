@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
-import 'center_profile_screen.dart';
+import 'center_preview_screen.dart';
 
 class CenterAdminDashboard extends ConsumerWidget {
   const CenterAdminDashboard({super.key});
@@ -63,12 +63,12 @@ class CenterAdminDashboard extends ConsumerWidget {
                   context,
                   icon: Icons.business,
                   title: 'Center Profile',
-                  subtitle: 'Edit your center information',
+                  subtitle: 'View and edit your center information',
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const CenterProfileScreen(),
+                        builder: (_) => const CenterPreviewScreen(),
                       ),
                     );
                   },

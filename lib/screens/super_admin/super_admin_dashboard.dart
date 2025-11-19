@@ -4,6 +4,7 @@ import '../../utils/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import 'category_management_screen.dart';
+import 'centers_management_screen.dart';
 
 class SuperAdminDashboard extends ConsumerWidget {
   const SuperAdminDashboard({super.key});
@@ -77,14 +78,26 @@ class SuperAdminDashboard extends ConsumerWidget {
                   icon: Icons.approval,
                   title: 'Center Approvals',
                   subtitle: 'Review pending center registrations',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CentersManagementScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildDashboardCard(
                   context,
                   icon: Icons.business,
                   title: 'All Centers',
                   subtitle: 'Manage all centers',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CentersManagementScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildDashboardCard(
                   context,

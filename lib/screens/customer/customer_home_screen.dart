@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
-import '../../models/category_model.dart';
 import '../../models/service_model.dart';
-import '../../providers/firestore_provider.dart';
+import '../../models/category_model.dart';
 import '../../providers/auth_provider.dart';
-import 'centers_screen.dart';
+import '../../providers/firestore_provider.dart';
 import 'subscriptions_screen.dart';
 import 'profile_screen.dart';
+import 'center_detail_screen.dart';
+import 'schedule_screen.dart';
+import 'program_detail_screen.dart';
 
 class CustomerHomeScreen extends ConsumerStatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -22,7 +24,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
   final List<Widget> _screens = [
     const _HomeTab(),
-    const CentersScreen(),
+    const ScheduleScreen(),
     const SubscriptionsScreen(),
     const ProfileScreen(),
   ];
@@ -385,6 +387,27 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
                 ),
               ),
               const SizedBox(height: 4),
+              if (service.centerName.isNotEmpty) ...[
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.business,
+                      size: 14,
+                      color: AppColors.accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      service.centerName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
               Text(
                 'by ${service.trainer}',
                 style: const TextStyle(
@@ -418,12 +441,17 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
                   ),
                   ElevatedButton(
                     onPressed: () {
-                      // TODO: Navigate to service detail or booking screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProgramDetailScreen(program: service),
+                        ),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                     ),
-                    child: const Text('Book'),
+                    child: const Text('View'),
                   ),
                 ],
               ),
@@ -440,7 +468,12 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          // TODO: Navigate to center detail screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CenterDetailScreen(center: center),
+            ),
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
