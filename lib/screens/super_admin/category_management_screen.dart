@@ -71,7 +71,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                 else
                   ...categories.map((category) => _buildCategoryCard(category)),
                 const SizedBox(height: 16),
-                // Add button
+                // Add button aa
                 _buildAddButton(),
               ],
             ),
