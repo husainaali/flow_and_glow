@@ -6,13 +6,14 @@ import 'dart:io';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
 import '../../models/trainer_model.dart';
-import '../../models/service_model.dart';
+import '../../models/program_model.dart';
+import '../../models/service_type_model.dart';
 import '../../models/package_model.dart';
-import '../../models/category_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/firestore_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
+import '../customer/program_detail_screen.dart';
+import '../customer/package_detail_screen_new.dart';
 import 'add_service_dialog.dart';
 
 class CenterProfileScreen extends ConsumerStatefulWidget {
@@ -35,8 +36,11 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
   // Trainers
   List<TrainerModel> _trainers = [];
   
-  // Services
-  List<ServiceModel> _services = [];
+  // Service Types (Yoga, Pilates, etc.)
+  List<ServiceTypeModel> _serviceTypes = [];
+  
+  // Programs
+  List<ProgramModel> _programs = [];
   
   // Packages
   List<PackageModel> _packages = [];
@@ -83,7 +87,8 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
           _addressController.text = center.address;
           _centerImageUrl = center.imageUrl;
           _trainers = List.from(center.trainers);
-          _services = List.from(center.services);
+          _serviceTypes = List.from(center.serviceTypes);
+          _programs = List.from(center.programs);
         });
       }
     } catch (e) {
@@ -121,7 +126,8 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
           adminId: user!.uid,
           createdAt: DateTime.now(),
           trainers: _trainers,
-          services: _services,
+          serviceTypes: _serviceTypes,
+          programs: _programs,
         );
         final centerId = await _firestoreService.createCenter(newCenter);
         
@@ -141,7 +147,8 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
             'address': _addressController.text.trim(),
             'imageUrl': _centerImageUrl ?? '',
             'trainers': _trainers.map((t) => t.toMap()).toList(),
-            'services': _services.map((s) => s.toMap()).toList(),
+            'serviceTypes': _serviceTypes.map((s) => s.toMap()).toList(),
+            'programs': _programs.map((p) => p.toMap()).toList(),
           },
         );
       }
@@ -304,13 +311,36 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
               _buildAddButton('Add Trainer', _showAddTrainerDialog),
               const SizedBox(height: 32),
               
-              // Manage Services Section
+              // Manage Service Types Section
               _buildSectionTitle('Manage Services'),
+              const Text(
+                'Add service types offered at your center (e.g., Yoga, Pilates, Nutrition, Therapy)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: 16),
-              ..._services.asMap().entries.map((entry) {
-                return _buildServiceCard(entry.key, entry.value);
+              ..._serviceTypes.asMap().entries.map((entry) {
+                return _buildServiceTypeCard(entry.key, entry.value);
               }),
-              _buildAddButton('Add Service', _showAddServiceDialog),
+              _buildAddButton('Add Service Type', _showAddServiceTypeDialog),
+              const SizedBox(height: 32),
+              
+              // Manage Programs Section
+              _buildSectionTitle('Manage Programs'),
+              const Text(
+                'Add scheduled programs with trainer, dates, and pricing',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ..._programs.asMap().entries.map((entry) {
+                return _buildProgramCard(entry.key, entry.value);
+              }),
+              _buildAddButton('Add Program', _showAddProgramDialog),
               const SizedBox(height: 32),
               
               // Manage Packages Section
@@ -488,25 +518,30 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     );
   }
 
-  Widget _buildServiceCard(int index, ServiceModel service) {
+  Widget _buildServiceTypeCard(int index, ServiceTypeModel serviceType) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
+        leading: Icon(
+          Icons.fitness_center,
+          color: AppColors.primary,
+          size: 32,
+        ),
         title: Text(
-          service.title,
+          serviceType.name,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        subtitle: Text('${service.trainer} • BHD ${service.price}'),
+        subtitle: Text(serviceType.description),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               icon: const Icon(Icons.edit, color: AppColors.accent),
-              onPressed: () => _showEditServiceDialog(index, service),
+              onPressed: () => _showEditServiceTypeDialog(index, serviceType),
             ),
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteService(index),
+              onPressed: () => _deleteServiceType(index),
             ),
           ],
         ),
@@ -514,27 +549,189 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     );
   }
 
+  Widget _buildProgramCard(int index, ProgramModel program) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProgramDetailScreen(program: program),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Program Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: program.headerImageUrl != null && program.headerImageUrl!.isNotEmpty
+                    ? (program.headerImageUrl!.startsWith('http')
+                        ? Image.network(
+                            program.headerImageUrl!,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 80,
+                                height: 80,
+                                color: AppColors.secondary,
+                                child: const Icon(
+                                  Icons.fitness_center,
+                                  color: AppColors.primary,
+                                  size: 40,
+                                ),
+                              );
+                            },
+                          )
+                        : Image.file(
+                            File(program.headerImageUrl!),
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 80,
+                                height: 80,
+                                color: AppColors.secondary,
+                                child: const Icon(
+                                  Icons.fitness_center,
+                                  color: AppColors.primary,
+                                  size: 40,
+                                ),
+                              );
+                            },
+                          ))
+                    : Container(
+                        width: 80,
+                        height: 80,
+                        color: AppColors.secondary,
+                        child: const Icon(
+                          Icons.fitness_center,
+                          color: AppColors.primary,
+                          size: 40,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              // Program Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      program.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${program.trainer} • ${program.formattedPricing}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (program.weeklyDays.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${program.formattedSchedule} • ${program.startTime}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Action Buttons
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: AppColors.accent),
+                    onPressed: () => _showEditProgramDialog(index, program),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteProgram(index),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
   Widget _buildPackageCard(int index, PackageModel package) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        title: Text(
-          package.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text('${package.instructor} • BHD ${package.price}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: AppColors.accent),
-              onPressed: () => _showEditPackageDialog(index, package),
+      child: InkWell(
+        onTap: () {
+          // Navigate to package detail screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PackageDetailScreenNew(package: package),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deletePackage(index),
-            ),
-          ],
+          );
+        },
+        child: ListTile(
+          leading: package.headerImageUrl != null && package.headerImageUrl!.isNotEmpty
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    package.headerImageUrl!,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 60,
+                        height: 60,
+                        color: AppColors.secondary,
+                        child: const Icon(Icons.card_giftcard, color: AppColors.primary),
+                      );
+                    },
+                  ),
+                )
+              : Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.card_giftcard, color: AppColors.primary),
+                ),
+          title: Text(
+            package.title,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text('${package.programIds.length} programs • BHD ${package.price}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit, color: AppColors.accent),
+                onPressed: () => _showEditPackageDialog(index, package),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => _deletePackage(index),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -930,144 +1127,89 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     );
   }
 
-  // Service Dialogs
-  Future<void> _showAddServiceDialog() async {
-    final user = ref.read(currentUserProvider).value;
-    final result = await showDialog<ServiceModel>(
-      context: context,
-      builder: (context) => AddServiceDialog(
-        trainers: _trainers,
-        centerId: user?.centerId ?? _currentCenter?.id ?? '',
-      ),
-    );
-    
-    if (result != null) {
-      setState(() {
-        _services.add(result);
-      });
-    }
-  }
-
-  Future<void> _showEditServiceDialog(int index, ServiceModel service) async {
-    final result = await showDialog<ServiceModel>(
-      context: context,
-      builder: (context) => AddServiceDialog(
-        existingService: service,
-        trainers: _trainers,
-        centerId: service.centerId,
-      ),
-    );
-    
-    if (result != null) {
-      setState(() {
-        _services[index] = result;
-      });
-    }
-  }
-
-  void _deleteService(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Service'),
-        content: const Text('Are you sure you want to delete this service?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _services.removeAt(index);
-              });
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Package Dialogs
-  void _showAddPackageDialog() {
-    final titleController = TextEditingController();
+  // Service Type Dialogs
+  void _showAddServiceTypeDialog() {
+    final nameController = TextEditingController();
     final descriptionController = TextEditingController();
-    final priceController = TextEditingController();
-    final instructorController = TextEditingController();
-    final sessionsController = TextEditingController();
-    PackageCategory selectedCategory = PackageCategory.yoga;
-    PackageDuration selectedDuration = PackageDuration.monthly;
+    File? selectedImage;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Package'),
+          title: const Text('Add Service Type'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Image Preview
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final pickedFile = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 800,
+                      maxHeight: 800,
+                      imageQuality: 85,
+                    );
+                    if (pickedFile != null) {
+                      setDialogState(() {
+                        selectedImage = File(pickedFile.path);
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    height: 150,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                      image: selectedImage != null
+                          ? DecorationImage(
+                              image: FileImage(selectedImage!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: selectedImage == null
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate,
+                                size: 40,
+                                color: AppColors.primary.withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Add Service Photo',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary.withOpacity(0.7),
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+                ),
                 TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Package Name'),
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Service Name',
+                    hintText: 'e.g., Yoga, Pilates, Nutrition',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Brief description of the service',
+                  ),
                   maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: instructorController,
-                  decoration: const InputDecoration(labelText: 'Instructor'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<PackageCategory>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: PackageCategory.values.map((cat) {
-                    return DropdownMenuItem(
-                      value: cat,
-                      child: Text(cat.toString().split('.').last),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedCategory = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<PackageDuration>(
-                  value: selectedDuration,
-                  decoration: const InputDecoration(labelText: 'Duration'),
-                  items: PackageDuration.values.map((dur) {
-                    return DropdownMenuItem(
-                      value: dur,
-                      child: Text(dur.toString().split('.').last),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => selectedDuration = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: priceController,
-                  decoration: const InputDecoration(labelText: 'Price (BHD)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: sessionsController,
-                  decoration: const InputDecoration(labelText: 'Sessions per Week'),
-                  keyboardType: TextInputType.number,
                 ),
               ],
             ),
@@ -1078,20 +1220,34 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                if (titleController.text.isNotEmpty) {
+              onPressed: () async {
+                if (nameController.text.isNotEmpty) {
+                  String? iconName;
+                  
+                  // Upload image if selected
+                  if (selectedImage != null) {
+                    try {
+                      final storageService = StorageService();
+                      final serviceTypeId = DateTime.now().millisecondsSinceEpoch.toString();
+                      iconName = await storageService.uploadCenterImage(
+                        selectedImage!,
+                        'service_types/$serviceTypeId',
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error uploading image: $e')),
+                        );
+                      }
+                    }
+                  }
+                  
                   setState(() {
-                    _packages.add(PackageModel(
+                    _serviceTypes.add(ServiceTypeModel(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      centerId: _currentCenter?.id ?? '',
-                      centerName: _centerNameController.text,
-                      title: titleController.text,
+                      name: nameController.text,
                       description: descriptionController.text,
-                      instructor: instructorController.text,
-                      category: selectedCategory,
-                      duration: selectedDuration,
-                      price: double.tryParse(priceController.text) ?? 0.0,
-                      sessionsPerWeek: int.tryParse(sessionsController.text) ?? 0,
+                      iconName: iconName,
                       createdAt: DateTime.now(),
                     ));
                   });
@@ -1106,9 +1262,647 @@ class _CenterProfileScreenState extends ConsumerState<CenterProfileScreen> {
     );
   }
 
+  void _showEditServiceTypeDialog(int index, ServiceTypeModel serviceType) {
+    final nameController = TextEditingController(text: serviceType.name);
+    final descriptionController = TextEditingController(text: serviceType.description);
+    File? selectedImage;
+    String? existingIconName = serviceType.iconName;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Service Type'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Image Preview
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final pickedFile = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 800,
+                      maxHeight: 800,
+                      imageQuality: 85,
+                    );
+                    if (pickedFile != null) {
+                      setDialogState(() {
+                        selectedImage = File(pickedFile.path);
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    height: 150,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                      image: selectedImage != null
+                          ? DecorationImage(
+                              image: FileImage(selectedImage!),
+                              fit: BoxFit.cover,
+                            )
+                          : (existingIconName != null && existingIconName.isNotEmpty
+                              ? DecorationImage(
+                                  image: NetworkImage(existingIconName),
+                                  fit: BoxFit.cover,
+                                )
+                              : null),
+                    ),
+                    child: selectedImage == null && (existingIconName == null || existingIconName.isEmpty)
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate,
+                                size: 40,
+                                color: AppColors.primary.withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Add Service Photo',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary.withOpacity(0.7),
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+                ),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Service Name'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isNotEmpty) {
+                  String? iconName = existingIconName;
+                  
+                  // Upload new image if selected
+                  if (selectedImage != null) {
+                    try {
+                      final storageService = StorageService();
+                      iconName = await storageService.uploadCenterImage(
+                        selectedImage!,
+                        'service_types/${serviceType.id}',
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error uploading image: $e')),
+                        );
+                      }
+                    }
+                  }
+                  
+                  setState(() {
+                    _serviceTypes[index] = ServiceTypeModel(
+                      id: serviceType.id,
+                      name: nameController.text,
+                      description: descriptionController.text,
+                      iconName: iconName,
+                      createdAt: serviceType.createdAt,
+                    );
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _deleteServiceType(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Service Type'),
+        content: const Text('Are you sure you want to delete this service type?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _serviceTypes.removeAt(index);
+              });
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Program Dialogs
+  Future<void> _showAddProgramDialog() async {
+    final user = ref.read(currentUserProvider).value;
+    final result = await showDialog<ProgramModel>(
+      context: context,
+      builder: (context) => AddServiceDialog(
+        trainers: _trainers,
+        centerId: user?.centerId ?? _currentCenter?.id ?? '',
+      ),
+    );
+    
+    if (result != null) {
+      setState(() {
+        _programs.add(result);
+      });
+    }
+  }
+
+  Future<void> _showEditProgramDialog(int index, ProgramModel program) async {
+    final result = await showDialog<ProgramModel>(
+      context: context,
+      builder: (context) => AddServiceDialog(
+        existingService: program,
+        trainers: _trainers,
+        centerId: program.centerId,
+      ),
+    );
+    
+    if (result != null) {
+      setState(() {
+        _programs[index] = result;
+      });
+    }
+  }
+
+  void _deleteProgram(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Program'),
+        content: const Text('Are you sure you want to delete this program?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _programs.removeAt(index);
+              });
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  // Package Dialogs
+  void _showAddPackageDialog() {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final priceController = TextEditingController();
+    Set<String> selectedProgramIds = {};
+    File? selectedImage;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create Package'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header Image
+                  GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final pickedFile = await picker.pickImage(
+                        source: ImageSource.gallery,
+                        maxWidth: 1200,
+                        maxHeight: 800,
+                        imageQuality: 85,
+                      );
+                      if (pickedFile != null) {
+                        setDialogState(() {
+                          selectedImage = File(pickedFile.path);
+                        });
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 150,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                        image: selectedImage != null
+                            ? DecorationImage(
+                                image: FileImage(selectedImage!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: selectedImage == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  size: 40,
+                                  color: AppColors.primary.withOpacity(0.5),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Add Package Photo',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary.withOpacity(0.7),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    ),
+                  ),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Package Name'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Package Price (BHD)',
+                      prefixText: 'BHD ',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Select Programs to Include:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_programs.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'No programs available. Please add programs first.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    )
+                  else
+                    ..._programs.map((program) {
+                      final isSelected = selectedProgramIds.contains(program.id);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            if (value == true) {
+                              selectedProgramIds.add(program.id);
+                            } else {
+                              selectedProgramIds.remove(program.id);
+                            }
+                          });
+                        },
+                        title: Text(program.title),
+                        subtitle: Text('${program.trainer} • BHD ${program.price}'),
+                        secondary: program.headerImageUrl != null && program.headerImageUrl!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  program.headerImageUrl!,
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 50,
+                                      height: 50,
+                                      color: AppColors.secondary,
+                                      child: const Icon(Icons.fitness_center, size: 24),
+                                    );
+                                  },
+                                ),
+                              )
+                            : Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.fitness_center, size: 24),
+                              ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isNotEmpty && selectedProgramIds.isNotEmpty) {
+                  String? imageUrl;
+                  
+                  // Upload image if selected
+                  if (selectedImage != null) {
+                    try {
+                      final storageService = StorageService();
+                      final packageId = DateTime.now().millisecondsSinceEpoch.toString();
+                      imageUrl = await storageService.uploadCenterImage(
+                        selectedImage!,
+                        'packages/$packageId',
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error uploading image: $e')),
+                        );
+                      }
+                    }
+                  }
+                  
+                  setState(() {
+                    _packages.add(PackageModel(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      centerId: _currentCenter?.id ?? '',
+                      centerName: _centerNameController.text,
+                      title: titleController.text,
+                      description: descriptionController.text,
+                      programIds: selectedProgramIds.toList(),
+                      headerImageUrl: imageUrl,
+                      price: double.tryParse(priceController.text) ?? 0.0,
+                      createdAt: DateTime.now(),
+                    ));
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showEditPackageDialog(int index, PackageModel package) {
-    // Similar to add but with pre-filled values
-    // Implementation similar to _showAddPackageDialog
+    final titleController = TextEditingController(text: package.title);
+    final descriptionController = TextEditingController(text: package.description);
+    final priceController = TextEditingController(text: package.price.toString());
+    Set<String> selectedProgramIds = Set.from(package.programIds);
+    File? selectedImage;
+    String? existingImageUrl = package.headerImageUrl;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Package'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header Image
+                  GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final pickedFile = await picker.pickImage(
+                        source: ImageSource.gallery,
+                        maxWidth: 1200,
+                        maxHeight: 800,
+                        imageQuality: 85,
+                      );
+                      if (pickedFile != null) {
+                        setDialogState(() {
+                          selectedImage = File(pickedFile.path);
+                        });
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 150,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                        image: selectedImage != null
+                            ? DecorationImage(
+                                image: FileImage(selectedImage!),
+                                fit: BoxFit.cover,
+                              )
+                            : (existingImageUrl != null && existingImageUrl.isNotEmpty
+                                ? DecorationImage(
+                                    image: NetworkImage(existingImageUrl),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null),
+                      ),
+                      child: selectedImage == null && (existingImageUrl == null || existingImageUrl.isEmpty)
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  size: 40,
+                                  color: AppColors.primary.withOpacity(0.5),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Add Package Photo',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary.withOpacity(0.7),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    ),
+                  ),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Package Name'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Package Price (BHD)',
+                      prefixText: 'BHD ',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Select Programs to Include:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_programs.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'No programs available.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    )
+                  else
+                    ..._programs.map((program) {
+                      final isSelected = selectedProgramIds.contains(program.id);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            if (value == true) {
+                              selectedProgramIds.add(program.id);
+                            } else {
+                              selectedProgramIds.remove(program.id);
+                            }
+                          });
+                        },
+                        title: Text(program.title),
+                        subtitle: Text('${program.trainer} • BHD ${program.price}'),
+                        secondary: program.headerImageUrl != null && program.headerImageUrl!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  program.headerImageUrl!,
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 50,
+                                      height: 50,
+                                      color: AppColors.secondary,
+                                      child: const Icon(Icons.fitness_center, size: 24),
+                                    );
+                                  },
+                                ),
+                              )
+                            : Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.fitness_center, size: 24),
+                              ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isNotEmpty && selectedProgramIds.isNotEmpty) {
+                  String? imageUrl = existingImageUrl;
+                  
+                  // Upload new image if selected
+                  if (selectedImage != null) {
+                    try {
+                      final storageService = StorageService();
+                      imageUrl = await storageService.uploadCenterImage(
+                        selectedImage!,
+                        'packages/${package.id}',
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error uploading image: $e')),
+                        );
+                      }
+                    }
+                  }
+                  
+                  setState(() {
+                    _packages[index] = package.copyWith(
+                      title: titleController.text,
+                      description: descriptionController.text,
+                      programIds: selectedProgramIds.toList(),
+                      headerImageUrl: imageUrl,
+                      price: double.tryParse(priceController.text) ?? package.price,
+                    );
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _deletePackage(int index) {

@@ -108,28 +108,14 @@
 ### Title: "Why Mobile App Over Website?"
 
 ### Content:
-- **Research showed mobile apps are preferred for wellness services:**
-  - People check wellness schedules on-the-go
-  - Mobile apps provide better user experience for booking
-  - Push notifications for class reminders and updates
-  - Easier access to location-based services
-
-- **Mobile-First Benefits:**
-  - **Better engagement:** Users can access their wellness schedule anytime, anywhere
-  - **Native features:** GPS for finding nearby centers, camera for profile setup, notifications for reminders
-  - **Offline capabilities:** View booked sessions without internet
-  - **Personalization:** Tailored recommendations based on user preferences
-
-- **Development advantages:**
-  - Modern mobile development tools make cross-platform apps efficient
-  - Single codebase for both iOS and Android
-  - Better performance than mobile websites
-  - Access to device features (calendar integration, notifications, etc.)
+- People check wellness schedules on-the-go and need quick access to their bookings
+- Mobile apps provide better user experience with push notifications for class reminders
+- Native features like GPS help users find nearby centers easily
+- Mobile apps offer better engagement and personalization for wellness journeys
 
 ### Visual Suggestion:
 - Mobile phone mockup vs. desktop website
 - Icons showing mobile features (GPS, notifications, camera)
-- Team collaboration illustration
 
 ---
 
@@ -138,24 +124,10 @@
 ### Title: "Choosing Flutter and Planning the Work"
 
 ### Content:
-- **Platform Decision:**
-  - We had two choices: **native languages** (Java/Kotlin for Android, Swift for iOS) or **cross-platform development**
-  - We chose **Flutter**, a cross-platform framework from Google
-
-- **Why Flutter?**
-  - Build one app for both Android and iOS with a single codebase
-  - Compared alternatives: React Native, Xamarin, and Ionic
-  - Flutter offers:
-    - **Faster performance**
-    - **Easier to learn and develop**
-    - **Beautiful, customizable UI**
-    - **Strong community support**
-
-- **Tech Stack:**
-  - **Frontend:** Flutter (Dart)
-  - **Backend:** Firebase (Authentication, Firestore, Storage)
-  - **Design:** Figma for UI/UX design
-  - **State Management:** Provider pattern
+- We initially considered building native apps separately for Android and iOS, but realized cross-platform development would be more efficient
+- After researching cross-platform options, we chose Flutter because it has the highest percentage of apps on the App Store
+- Flutter has a strong community with excellent documentation and learning resources
+- The framework offers powerful features and beautiful UI capabilities that suited our wellness app needs
 
 ### Visual Suggestion:
 - Flutter logo and comparison with other frameworks
@@ -164,72 +136,50 @@
 
 ---
 
-## **Slide 7: App Flow - User Roles**
+## **Slide 7: App Flow - Super Admin & Center Admin**
 
-### Title: "App Flow: Three User Journeys"
+### Title: "The Platform Foundation"
 
 ### Content:
 
-### **1. Super Admin Journey:**
-- **Approve center registration requests**
-- Review center credentials and documentation
-- Manage platform-wide settings
-- Monitor center activities and user reports
-- Handle disputes and quality control
-- View analytics and platform statistics
+**Super Admin Scenario:**
+- The app starts with the Super Admin setting up initial configurations and adding wellness categories to the home page
+- Super Admin reviews and approves center registration requests from wellness centers wanting to join the platform
+- They monitor all platform activities to ensure quality and compliance
+- Super Admin provides support to both center admins and customers when needed
+- They maintain the overall health and integrity of the Flow and Glow ecosystem
 
-### **2. Center Admin Journey:**
-- **Register and create center profile**
-- Add wellness programs and packages
-- Set pricing and schedules
-- Upload images and descriptions
-- Manage bookings and subscriptions
-- View customer feedback
-- Update availability and class times
-
-### **3. Customer Journey:**
-- **Browse wellness centers and programs**
-- Filter by category, location, and price
-- Compare packages from different centers
-- Book and subscribe to programs
-- Manage active subscriptions
-- View booking history
-- Rate and review centers
-- Receive notifications for upcoming sessions
+**Center Admin Scenario:**
+- Center Admin registers their wellness center and creates a detailed profile with images and descriptions
+- They add their wellness programs with pricing, schedules, and package options
+- Center Admin monitors customer subscriptions and manages transactions
+- They track program performance and customer engagement
+- Center Admin provides direct support to their subscribed customers
 
 ### Visual Suggestion:
-- Three-column layout with icons for each role
-- App screenshots showing key screens for each user type
-- Flow diagram showing interactions between roles
+- Split screen showing Super Admin and Center Admin dashboards
+- Flow diagram showing approval process
+- Icons representing key admin functions
 
 ---
 
-## **Slide 8: App Functionality Demonstration**
+## **Slide 8: App Functionality - Customer Journey**
 
-### Title: "Flow and Glow in Action"
+### Title: "The Customer Experience"
 
 ### Content:
 
-### **Key Features Demonstrated:**
+**Customer Scenario:**
+- Customer opens the app and browses wellness centers by categories like Yoga, Meditation, and Fitness
+- They find a suitable program that matches their wellness goals and schedule preferences
+- Customer subscribes to the program and completes the payment securely through the app
+- They can view all their subscribed programs in a personalized calendar view
+- Customer receives notifications for upcoming sessions and can track their wellness journey progress
 
-**For Customers:**
-- Discover wellness centers by category (Yoga, Meditation, Fitness, etc.)
-- View detailed program information with images and descriptions
-- See pricing, duration, and schedule
-- One-tap booking and subscription
-- Personal dashboard with upcoming sessions
-- Manage and track wellness journey
-
-**For Center Admins:**
-- Easy program creation with rich media
-- Real-time booking management
-- Customer communication tools
-- Analytics on program performance
-
-**For Super Admins:**
-- Approval workflow for new centers
-- Platform oversight and moderation
-- Quality assurance tools
+### Visual Suggestion:
+- Customer app screenshots showing browse, subscribe, and calendar views
+- User flow diagram from discovery to subscription
+- Mobile phone mockup with key customer screens
 
 ### **App Highlights:**
 - Clean, intuitive interface

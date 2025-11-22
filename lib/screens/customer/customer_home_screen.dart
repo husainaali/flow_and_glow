@@ -1,8 +1,8 @@
+import 'package:flow_and_glow/models/program_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
-import '../../models/service_model.dart';
 import '../../models/category_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
@@ -98,8 +98,8 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
     final currentUserAsync = ref.watch(currentUserProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
     final servicesAsync = _selectedCategoryId == null
-        ? ref.watch(servicesProvider)
-        : ref.watch(servicesByCategoryProvider(_selectedCategoryId!));
+        ? ref.watch(programsProvider)
+        : ref.watch(programsByCategoryProvider(_selectedCategoryId!));
     final centersAsync = ref.watch(centersProvider(null)); // Show all centers
 
     return SafeArea(
@@ -226,7 +226,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
 
   Widget _buildServicesTab(
     AsyncValue<List<CategoryModel>> categoriesAsync,
-    AsyncValue<List<ServiceModel>> servicesAsync,
+    AsyncValue<List<ProgramModel>> servicesAsync,
   ) {
     return Column(
       children: [
@@ -366,7 +366,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> with SingleTickerProviderSta
     );
   }
 
-  Widget _buildServiceCard(ServiceModel service) {
+  Widget _buildServiceCard(ProgramModel service) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(

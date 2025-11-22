@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
 import '../../models/package_model.dart';
 import '../../models/review_model.dart';
+import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../providers/auth_provider.dart';
+import 'program_detail_screen.dart';
+import '../center_admin/center_profile_screen.dart';
 
 class CenterDetailScreen extends ConsumerStatefulWidget {
-  final CenterModel center;
+  final CenterModel? center;
+  final bool isPreviewMode;
 
   const CenterDetailScreen({
     super.key,
-    required this.center,
+    this.center,
+    this.isPreviewMode = false,
   });
 
   @override
@@ -23,34 +30,64 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
   final _firestoreService = FirestoreService();
   late TabController _tabController;
   
+  CenterModel? _currentCenter;
   List<PackageModel> _packages = [];
   List<ReviewModel> _reviews = [];
   PackageModel? _selectedPackage;
   bool _isLoading = false;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _checkIfAdmin();
     _loadCenterData();
+  }
+
+  void _checkIfAdmin() {
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      _isAdmin = user.role == UserRole.centerAdmin;
+    }
   }
 
   Future<void> _loadCenterData() async {
     setState(() => _isLoading = true);
     
     try {
-      // Load packages for this center
-      final packages = await _firestoreService.getPackages(centerId: widget.center.id).first;
+      CenterModel? center = widget.center;
       
-      // Load reviews for this center (mock data for now)
-      final reviews = _generateMockReviews(widget.center.id);
+      // If in preview mode and no center provided, load from admin's data
+      if (widget.isPreviewMode && center == null) {
+        final user = ref.read(currentUserProvider).value;
+        if (user != null) {
+          // Try to get center by centerId
+          if (user.centerId != null && user.centerId!.isNotEmpty) {
+            center = await _firestoreService.getCenter(user.centerId!);
+          }
+          // If no center found, try by adminId
+          if (center == null) {
+            center = await _firestoreService.getCenterByAdminId(user.uid);
+          }
+        }
+      }
       
-      if (mounted) {
-        setState(() {
-          _packages = packages;
-          _reviews = reviews;
-          _selectedPackage = packages.isNotEmpty ? packages.first : null;
-        });
+      if (center != null) {
+        // Load packages for this center
+        final packages = await _firestoreService.getPackages(centerId: center.id).first;
+        
+        // Load reviews for this center (mock data for now)
+        final reviews = _generateMockReviews(center.id);
+        
+        if (mounted) {
+          setState(() {
+            _currentCenter = center;
+            _packages = packages;
+            _reviews = reviews;
+            _selectedPackage = packages.isNotEmpty ? packages.first : null;
+          });
+        }
       }
     } catch (e) {
       print('Error loading center data: $e');
@@ -98,6 +135,36 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // If no center and in preview mode, navigate to edit page
+    if (_currentCenter == null && widget.isPreviewMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CenterProfileScreen(),
+          ),
+        );
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // If no center data at all, show error
+    if (_currentCenter == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Center not found'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
@@ -135,6 +202,28 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
           ),
         ],
       ),
+      floatingActionButton: _isAdmin && widget.isPreviewMode
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CenterProfileScreen(),
+                  ),
+                );
+                // Reload data after returning from edit screen
+                if (mounted) {
+                  _loadCenterData();
+                }
+              },
+              backgroundColor: AppColors.accent,
+              icon: const Icon(Icons.edit, color: AppColors.white),
+              label: const Text(
+                'Edit',
+                style: TextStyle(color: AppColors.white),
+              ),
+            )
+          : null,
     );
   }
 
@@ -144,7 +233,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
       pinned: true,
       flexibleSpace: FlexibleSpaceBar(
         title: Text(
-          widget.center.name,
+          _currentCenter!.name,
           style: const TextStyle(
             color: AppColors.white,
             fontWeight: FontWeight.bold,
@@ -160,9 +249,9 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
         background: Stack(
           fit: StackFit.expand,
           children: [
-            widget.center.imageUrl.isNotEmpty
+            _currentCenter!.imageUrl.isNotEmpty
                 ? Image.network(
-                    widget.center.imageUrl,
+                    _currentCenter!.imageUrl,
                     fit: BoxFit.cover,
                   )
                 : Container(
@@ -240,7 +329,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            widget.center.title ?? widget.center.name,
+            _currentCenter!.title ?? _currentCenter!.name,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -250,7 +339,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            widget.center.description,
+            _currentCenter!.description,
             style: const TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,
@@ -264,7 +353,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
   }
 
   Widget _buildTrainersSection() {
-    if (widget.center.trainers.isEmpty) {
+    if (_currentCenter!.trainers.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -294,7 +383,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
             ],
           ),
           child: Column(
-            children: widget.center.trainers.map((trainer) {
+            children: _currentCenter!.trainers.map((trainer) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Row(
@@ -344,7 +433,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
   }
 
   Widget _buildServicesPreview() {
-    if (widget.center.services.isEmpty) {
+    if (_currentCenter!.programs.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -374,34 +463,101 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
             ],
           ),
           child: Column(
-            children: widget.center.services.take(3).map((service) {
+            children: _currentCenter!.programs.take(3).map((service) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.spa,
-                        color: AppColors.accent,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        service.title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textPrimary,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      // Navigate to service detail screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProgramDetailScreen(program: service),
                         ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          // Service Image
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: service.headerImageUrl != null && service.headerImageUrl!.isNotEmpty
+                                ? (service.headerImageUrl!.startsWith('http')
+                                    ? Image.network(
+                                        service.headerImageUrl!,
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            width: 60,
+                                            height: 60,
+                                            color: AppColors.secondary,
+                                            child: const Icon(
+                                              Icons.spa,
+                                              color: AppColors.accent,
+                                              size: 24,
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : Image.file(
+                                        File(service.headerImageUrl!),
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            width: 60,
+                                            height: 60,
+                                            color: AppColors.secondary,
+                                            child: const Icon(
+                                              Icons.spa,
+                                              color: AppColors.accent,
+                                              size: 24,
+                                            ),
+                                          );
+                                        },
+                                      ))
+                                : Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.secondary,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.spa,
+                                      color: AppColors.accent,
+                                      size: 24,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              service.title,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               );
             }).toList(),
@@ -482,30 +638,39 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
               ),
               const SizedBox(height: 16),
               Text(
-                '${_selectedPackage!.currency}${_selectedPackage!.price.toStringAsFixed(0)}/${_selectedPackage!.duration.toString().split('.').last}',
+                '${_selectedPackage!.currency}${_selectedPackage!.price.toStringAsFixed(0)}',
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                'Bundle of ${_selectedPackage!.programIds.length} Programs',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: _isAdmin ? null : () {
                     // TODO: Navigate to subscription screen
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
+                    backgroundColor: _isAdmin ? AppColors.textSecondary : AppColors.accent,
+                    disabledBackgroundColor: AppColors.textSecondary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Subscribe Now',
-                    style: TextStyle(
+                  child: Text(
+                    _isAdmin ? 'Not Available for Admins' : 'Subscribe Now',
+                    style: const TextStyle(
                       color: AppColors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -619,7 +784,7 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
   }
 
   Widget _buildServicesTab() {
-    if (widget.center.services.isEmpty) {
+    if (_currentCenter!.programs.isEmpty) {
       return const Center(
         child: Text(
           'No services available yet.',
@@ -633,90 +798,102 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
 
     return ListView.builder(
       padding: const EdgeInsets.all(20),
-      itemCount: widget.center.services.length,
+      itemCount: _currentCenter!.programs.length,
       itemBuilder: (context, index) {
-        final service = widget.center.services[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.spa,
-                  color: AppColors.accent,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        final service = _currentCenter!.programs[index];
+        return Card(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Navigate to service detail screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProgramDetailScreen(program: service),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20,horizontal: 20),
+                child: Row(
                   children: [
-                    Text(
-                      service.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                    // Service Image
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: service.headerImageUrl != null && service.headerImageUrl!.isNotEmpty
+                          ? (service.headerImageUrl!.startsWith('http')
+                              ? Image.network(
+                                  service.headerImageUrl!,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: AppColors.secondary,
+                                      child: const Icon(
+                                        Icons.spa,
+                                        color: AppColors.accent,
+                                        size: 24,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Image.file(
+                                  File(service.headerImageUrl!),
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: AppColors.secondary,
+                                      child: const Icon(
+                                        Icons.spa,
+                                        color: AppColors.accent,
+                                        size: 24,
+                                      ),
+                                    );
+                                  },
+                                ))
+                          : Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: AppColors.secondary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.spa,
+                                color: AppColors.accent,
+                                size: 24,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        service.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      service.description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          'BHD ${service.price.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.accent,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '• ${service.trainer}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: AppColors.textSecondary,
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: AppColors.textLight,
-              ),
-            ],
+            ),
           ),
         );
       },

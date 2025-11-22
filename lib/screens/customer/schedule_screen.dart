@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
 import '../../models/session_model.dart';
+import '../../services/schedule_service.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   const ScheduleScreen({super.key});
@@ -13,12 +15,26 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   DateTime _selectedDate = DateTime.now();
   DateTime _currentMonth = DateTime.now();
-  
-  // Mock sessions data - will be replaced with Firestore data later
-  final List<SessionModel> _sessions = [];
+  final _scheduleService = ScheduleService();
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Schedule'),
+          backgroundColor: AppColors.white,
+          elevation: 0,
+        ),
+        body: const Center(
+          child: Text('Please login to view your schedule'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -26,23 +42,40 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         backgroundColor: AppColors.white,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          // Calendar widget
-          _buildCalendar(),
-          
-          const SizedBox(height: 16),
-          
-          // Sessions list for selected date
-          Expanded(
-            child: _buildSessionsList(),
-          ),
-        ],
+      body: StreamBuilder<List<SessionModel>>(
+        stream: _scheduleService.getUserSessions(user.uid),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error loading sessions: ${snapshot.error}'),
+            );
+          }
+
+          final sessions = snapshot.data ?? [];
+
+          return Column(
+            children: [
+              // Calendar widget
+              _buildCalendar(sessions),
+              
+              const SizedBox(height: 16),
+              
+              // Sessions list for selected date
+              Expanded(
+                child: _buildSessionsList(sessions),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildCalendar() {
+  Widget _buildCalendar(List<SessionModel> sessions) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -68,7 +101,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           const SizedBox(height: 8),
           
           // Calendar grid
-          _buildCalendarGrid(),
+          _buildCalendarGrid(sessions),
         ],
       ),
     );
@@ -133,7 +166,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  Widget _buildCalendarGrid() {
+  Widget _buildCalendarGrid(List<SessionModel> sessions) {
     final daysInMonth = _getDaysInMonth(_currentMonth);
     final firstDayOfMonth = DateTime(_currentMonth.year, _currentMonth.month, 1);
     final startingWeekday = firstDayOfMonth.weekday % 7; // 0 = Sunday
@@ -155,8 +188,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             final date = DateTime(_currentMonth.year, _currentMonth.month, dayNumber);
             final isSelected = _isSameDay(date, _selectedDate);
             final isToday = _isSameDay(date, DateTime.now());
-            final sessionsForDay = _getSessionsForDate(date);
-            final hasSession = sessionsForDay.isNotEmpty;
+            final sessionsForDay = _getSessionsForDate(date, sessions);
             
             return Expanded(
               child: _buildCalendarDay(
@@ -164,7 +196,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 date,
                 isSelected,
                 isToday,
-                hasSession,
+                sessionsForDay,
               ),
             );
           }),
@@ -178,63 +210,92 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     DateTime date,
     bool isSelected,
     bool isToday,
-    bool hasSession,
+    List<SessionModel> sessionsForDay,
   ) {
+    final hasSession = sessionsForDay.isNotEmpty;
+    final sessionCount = sessionsForDay.length;
+    
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedDate = date;
         });
       },
-      child: Container(
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.accent
-              : (isToday ? AppColors.secondary : Colors.transparent),
-          borderRadius: BorderRadius.circular(8),
-          border: isToday && !isSelected
-              ? Border.all(color: AppColors.accent, width: 1)
-              : null,
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Text(
-                day.toString(),
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected
-                      ? AppColors.white
-                      : (isToday ? AppColors.accent : AppColors.textPrimary),
-                ),
-              ),
-            ),
-            if (hasSession)
-              Positioned(
-                bottom: 4,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.white : AppColors.accent,
-                      shape: BoxShape.circle,
-                    ),
+      child: AspectRatio(
+        aspectRatio: 1, // Keep cells square
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.accent
+                : (isToday ? AppColors.secondary : Colors.transparent),
+            borderRadius: BorderRadius.circular(8),
+            border: isToday && !isSelected
+                ? Border.all(color: AppColors.accent, width: 1)
+                : null,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  day.toString(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected
+                        ? AppColors.white
+                        : (isToday ? AppColors.accent : AppColors.textPrimary),
                   ),
                 ),
-              ),
-          ],
+                if (hasSession) ...[
+                  const SizedBox(height: 2),
+                  // Show dots for sessions (max 3 visible)
+                  Flexible(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(
+                        sessionCount > 3 ? 3 : sessionCount,
+                        (index) => Container(
+                          width: 4,
+                          height: 4,
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.white : AppColors.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (sessionCount > 3)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          '+${sessionCount - 3}',
+                          style: TextStyle(
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? AppColors.white : AppColors.accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSessionsList() {
-    final sessionsForSelectedDate = _getSessionsForDate(_selectedDate);
+  Widget _buildSessionsList(List<SessionModel> sessions) {
+    final sessionsForSelectedDate = _getSessionsForDate(_selectedDate, sessions);
     
     if (sessionsForSelectedDate.isEmpty) {
       return Center(
@@ -453,8 +514,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         date1.day == date2.day;
   }
 
-  List<SessionModel> _getSessionsForDate(DateTime date) {
-    return _sessions.where((session) {
+  List<SessionModel> _getSessionsForDate(DateTime date, List<SessionModel> sessions) {
+    return sessions.where((session) {
       return _isSameDay(session.date, date);
     }).toList();
   }

@@ -53,14 +53,6 @@ class _PackageDetailScreenState extends ConsumerState<PackageDetailScreen> {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'by ${widget.package.instructor}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -74,6 +66,22 @@ class _PackageDetailScreenState extends ConsumerState<PackageDetailScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Bundle of ${widget.package.programIds.length} Programs',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -93,19 +101,6 @@ class _PackageDetailScreenState extends ConsumerState<PackageDetailScreen> {
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Details',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildDetailRow('Sessions per week', '${widget.package.sessionsPerWeek} days'),
-                  _buildDetailRow('Duration', widget.package.duration.toString().split('.').last),
-                  _buildDetailRow('Category', widget.package.category.toString().split('.').last),
                   const SizedBox(height: 24),
                   const Text(
                     'Payment Method',
@@ -273,22 +268,23 @@ class _PackageDetailScreenState extends ConsumerState<PackageDetailScreen> {
 
     try {
       final now = DateTime.now();
+      
+      // TODO: Create subscriptions for each program in the package
+      // For now, create a single subscription for the package
       final subscription = SubscriptionModel(
         id: '',
         userId: user.uid,
         packageId: widget.package.id,
         packageTitle: widget.package.title,
-        instructor: widget.package.instructor,
+        instructor: 'Multiple Instructors', // Package bundles multiple programs
         price: widget.package.price,
         currency: widget.package.currency,
-        sessionsPerWeek: widget.package.sessionsPerWeek,
-        sessionsLeft: widget.package.sessionsPerWeek * 4, // Assuming 4 weeks
+        sessionsPerWeek: 0, // Will be calculated from programs
+        sessionsLeft: 0, // Will be calculated from programs
         status: SubscriptionStatus.active,
         paymentMethod: _selectedPaymentMethod,
         startDate: now,
-        renewalDate: widget.package.duration == PackageDuration.monthly
-            ? now.add(const Duration(days: 30))
-            : now.add(const Duration(days: 365)),
+        renewalDate: now.add(const Duration(days: 30)), // Default to monthly
         createdAt: now,
       );
 

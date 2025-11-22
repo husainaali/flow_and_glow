@@ -1,11 +1,17 @@
+import 'package:flow_and_glow/models/program_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/service_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/review_model.dart';
+import '../../models/subscription_model.dart';
+import '../../models/session_model.dart';
 import '../../utils/app_colors.dart';
+import '../../services/schedule_service.dart';
+import 'payment_screen.dart' as payment;
 
 class ProgramDetailScreen extends ConsumerStatefulWidget {
-  final ServiceModel program;
+  final ProgramModel program;
 
   const ProgramDetailScreen({
     super.key,
@@ -206,7 +212,7 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        widget.program.formattedPricing,
+                        'BHD ${widget.program.price.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -336,7 +342,7 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Lead ${widget.program.serviceType == ServiceType.program ? 'Instructor' : 'Nutritionist'}',
+                      'Lead Instructor',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,
@@ -349,8 +355,8 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
           ),
         ),
         
-        // Schedule Info (if program)
-        if (widget.program.serviceType == ServiceType.program && widget.program.weeklyDays.isNotEmpty) ...[
+        // Schedule Info
+        if (widget.program.weeklyDays.isNotEmpty) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),
@@ -410,12 +416,7 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: () {
-          // TODO: Implement subscription logic
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Subscription feature coming soon!')),
-          );
-        },
+        onPressed: _handleSubscribe,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.accent,
           foregroundColor: AppColors.white,
@@ -433,6 +434,135 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleSubscribe() async {
+    // Check if user is logged in
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to subscribe')),
+      );
+      return;
+    }
+
+    // Navigate to payment screen
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => payment.PaymentScreen(
+          programTitle: widget.program.title,
+          price: widget.program.price,
+          currency: 'BD',
+        ),
+      ),
+    );
+
+    // Check if payment was successful
+    if (result != null && result['success'] == true) {
+      await _createSubscriptionAndSchedule();
+    }
+  }
+
+  Future<void> _createSubscriptionAndSchedule() async {
+    final user = FirebaseAuth.instance.currentUser!;
+    final scheduleService = ScheduleService();
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // 1. Create subscription
+      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+      final now = DateTime.now();
+      
+      final subscription = SubscriptionModel(
+        id: subscriptionId,
+        userId: user.uid,
+        packageId: widget.program.id, // Using program ID as package ID
+        packageTitle: widget.program.title,
+        instructor: widget.program.trainer,
+        price: widget.program.price,
+        currency: 'BD',
+        sessionsPerWeek: widget.program.weeklyDays.length,
+        sessionsLeft: 0, // Will be calculated from sessions
+        status: SubscriptionStatus.active,
+        paymentMethod: PaymentMethod.online,
+        startDate: now,
+        renewalDate: now.add(const Duration(days: 30)),
+        createdAt: now,
+      );
+
+      // 2. Save subscription to Firestore
+      await FirebaseFirestore.instance
+          .collection('subscriptions')
+          .doc(subscription.id)
+          .set(subscription.toFirestore());
+
+      // 3. Generate schedule based on program type
+      List<SessionModel> sessions;
+
+      if (widget.program.programType == ProgramType.regular) {
+        // Regular program - generate sessions based on weekly schedule
+        sessions = await scheduleService.generateRegularProgramSessions(
+          subscriptionId: subscription.id,
+          userId: user.uid,
+          program: widget.program,
+          startDate: widget.program.programStartDate ?? now,
+          endDate: widget.program.programEndDate ?? now.add(const Duration(days: 90)),
+        );
+      } else {
+        // Nutrition program - generate meal delivery sessions
+        // TODO: Get these values from customer selection
+        sessions = await scheduleService.generateNutritionProgramSessions(
+          subscriptionId: subscription.id,
+          userId: user.uid,
+          program: widget.program,
+          selectedMonths: widget.program.subscriptionMonths ?? 3,
+          selectedDaysPerWeek: widget.program.daysPerWeek ?? 5,
+          selectedMealsPerDay: widget.program.mealsPerDay ?? 3,
+        );
+      }
+
+      // 4. Save all sessions to Firestore
+      await scheduleService.saveSessions(sessions);
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // 5. Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Subscription created! ${sessions.length} sessions scheduled.'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // 6. Navigate back or to calendar
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Show error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating subscription: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildReviewsSection() {

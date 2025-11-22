@@ -42,60 +42,82 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Container(
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.white,
+                    color: AppColors.secondary,
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(color: AppColors.primary),
                   ),
-                  child: Row(
+                  child: Stack(
                     children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _showActive = true;
-                            });
-                          },
+                      // Animated background pill
+                      AnimatedAlign(
+                        alignment: _showActive
+                            ? Alignment.centerLeft
+                            : Alignment.centerRight,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                        child: FractionallySizedBox(
+                          widthFactor: 0.5,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            margin: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: _showActive ? AppColors.white : AppColors.secondary,
+                              color: AppColors.white,
                               borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: Text(
-                              'Active',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _showActive ? AppColors.textPrimary : AppColors.textSecondary,
-                                fontWeight: _showActive ? FontWeight.w600 : FontWeight.normal,
-                              ),
                             ),
                           ),
                         ),
                       ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _showActive = false;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: !_showActive ? AppColors.white : AppColors.secondary,
+                      // Labels and tap areas
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: Text(
-                              'Expired',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: !_showActive ? AppColors.textPrimary : AppColors.textSecondary,
-                                fontWeight: !_showActive ? FontWeight.w600 : FontWeight.normal,
+                              onTap: () {
+                                if (!_showActive) {
+                                  setState(() {
+                                    _showActive = true;
+                                  });
+                                }
+                              },
+                              child: Center(
+                                child: Text(
+                                  'Active',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: _showActive
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(30),
+                              onTap: () {
+                                if (_showActive) {
+                                  setState(() {
+                                    _showActive = false;
+                                  });
+                                }
+                              },
+                              child: Center(
+                                child: Text(
+                                  'Expired',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: !_showActive
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

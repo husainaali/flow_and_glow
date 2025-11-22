@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'trainer_model.dart';
-import 'service_model.dart';
+import 'program_model.dart';
+import 'service_type_model.dart';
 
 enum CenterStatus { pending, approved, rejected }
 
@@ -16,7 +17,8 @@ class CenterModel {
   final DateTime createdAt;
   final String? title; // e.g., "Flow and Grow Wellness"
   final List<TrainerModel> trainers;
-  final List<ServiceModel> services;
+  final List<ServiceTypeModel> serviceTypes; // Types: Yoga, Pilates, Nutrition, Therapy
+  final List<ProgramModel> programs; // Scheduled programs with trainer, dates
 
   CenterModel({
     required this.id,
@@ -30,7 +32,8 @@ class CenterModel {
     required this.createdAt,
     this.title,
     this.trainers = const [],
-    this.services = const [],
+    this.serviceTypes = const [],
+    this.programs = const [],
   });
 
   factory CenterModel.fromFirestore(DocumentSnapshot doc) {
@@ -45,12 +48,21 @@ class CenterModel {
       }).toList();
     }
     
-    // Parse services
-    List<ServiceModel> services = [];
-    if (data['services'] != null) {
-      final servicesData = data['services'] as List;
-      services = servicesData.asMap().entries.map((entry) {
-        return ServiceModel.fromMap(entry.value as Map<String, dynamic>, entry.key.toString());
+    // Parse service types
+    List<ServiceTypeModel> serviceTypes = [];
+    if (data['serviceTypes'] != null) {
+      final serviceTypesData = data['serviceTypes'] as List;
+      serviceTypes = serviceTypesData.asMap().entries.map((entry) {
+        return ServiceTypeModel.fromMap(entry.value as Map<String, dynamic>, entry.key.toString());
+      }).toList();
+    }
+    
+    // Parse programs
+    List<ProgramModel> programs = [];
+    if (data['programs'] != null) {
+      final programsData = data['programs'] as List;
+      programs = programsData.asMap().entries.map((entry) {
+        return ProgramModel.fromMap(entry.value as Map<String, dynamic>, entry.key.toString());
       }).toList();
     }
     
@@ -69,7 +81,8 @@ class CenterModel {
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       title: data['title'],
       trainers: trainers,
-      services: services,
+      serviceTypes: serviceTypes,
+      programs: programs,
     );
   }
 
@@ -85,7 +98,8 @@ class CenterModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'title': title,
       'trainers': trainers.map((t) => t.toMap()).toList(),
-      'services': services.map((s) => s.toMap()).toList(),
+      'serviceTypes': serviceTypes.map((s) => s.toMap()).toList(),
+      'programs': programs.map((p) => p.toMap()).toList(),
     };
   }
 }

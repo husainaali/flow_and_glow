@@ -180,7 +180,7 @@ class CentersManagementScreen extends ConsumerWidget {
                 const Icon(Icons.fitness_center, size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
-                  '${center.services.length} Services',
+                  '${center.programs.length} Services',
                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
                 const SizedBox(width: 16),

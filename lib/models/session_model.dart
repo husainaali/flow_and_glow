@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class SessionModel {
   final String id;
   final String userId;
+  final String subscriptionId;
   final String centerId;
   final String centerName;
   final String programId;
@@ -17,6 +18,7 @@ class SessionModel {
   SessionModel({
     required this.id,
     required this.userId,
+    required this.subscriptionId,
     required this.centerId,
     required this.centerName,
     required this.programId,
@@ -33,6 +35,7 @@ class SessionModel {
     return SessionModel(
       id: id,
       userId: map['userId'] ?? '',
+      subscriptionId: map['subscriptionId'] ?? '',
       centerId: map['centerId'] ?? '',
       centerName: map['centerName'] ?? '',
       programId: map['programId'] ?? '',
@@ -59,6 +62,7 @@ class SessionModel {
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
+      'subscriptionId': subscriptionId,
       'centerId': centerId,
       'centerName': centerName,
       'programId': programId,

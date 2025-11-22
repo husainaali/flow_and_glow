@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import 'category_management_screen.dart';
 import 'centers_management_screen.dart';
+import 'all_users_screen.dart';
 
 class SuperAdminDashboard extends ConsumerWidget {
   const SuperAdminDashboard({super.key});
@@ -86,25 +87,19 @@ class SuperAdminDashboard extends ConsumerWidget {
                     );
                   },
                 ),
-                _buildDashboardCard(
-                  context,
-                  icon: Icons.business,
-                  title: 'All Centers',
-                  subtitle: 'Manage all centers',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const CentersManagementScreen(),
-                      ),
-                    );
-                  },
-                ),
+
                 _buildDashboardCard(
                   context,
                   icon: Icons.people,
                   title: 'Users',
                   subtitle: 'Manage all users',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AllUsersScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildDashboardCard(
                   context,

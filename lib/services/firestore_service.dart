@@ -3,7 +3,9 @@ import '../models/center_model.dart';
 import '../models/package_model.dart';
 import '../models/subscription_model.dart';
 import '../models/category_model.dart';
-import '../models/service_model.dart';
+import '../models/program_model.dart';
+import '../models/service_type_model.dart';
+import '../models/user_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -51,15 +53,11 @@ class FirestoreService {
   }
 
   // Packages
-  Stream<List<PackageModel>> getPackages({String? centerId, PackageCategory? category}) {
+  Stream<List<PackageModel>> getPackages({String? centerId}) {
     Query query = _firestore.collection('packages');
     
     if (centerId != null) {
       query = query.where('centerId', isEqualTo: centerId);
-    }
-    
-    if (category != null) {
-      query = query.where('category', isEqualTo: category.toString().split('.').last);
     }
     
     return query.snapshots().map((snapshot) =>
@@ -144,8 +142,8 @@ class FirestoreService {
     await _firestore.collection('categories').doc(categoryId).delete();
   }
 
-  // Services
-  Stream<List<ServiceModel>> getServices({String? centerId, String? categoryId}) {
+  // Programs (formerly Services)
+  Stream<List<ProgramModel>> getPrograms({String? centerId, String? categoryId}) {
     Query query = _firestore.collection('services');
     
     if (centerId != null) {
@@ -157,27 +155,84 @@ class FirestoreService {
     }
     
     return query.snapshots().map((snapshot) =>
-        snapshot.docs.map((doc) => ServiceModel.fromFirestore(doc)).toList());
+        snapshot.docs.map((doc) => ProgramModel.fromFirestore(doc)).toList());
   }
 
-  Future<ServiceModel?> getService(String serviceId) async {
-    final doc = await _firestore.collection('services').doc(serviceId).get();
+  Future<ProgramModel?> getProgram(String programId) async {
+    final doc = await _firestore.collection('programs').doc(programId).get();
     if (doc.exists) {
-      return ServiceModel.fromFirestore(doc);
+      return ProgramModel.fromFirestore(doc);
     }
     return null;
   }
 
-  Future<String> createService(ServiceModel service) async {
-    final docRef = await _firestore.collection('services').add(service.toFirestore());
+  Future<String> createProgram(ProgramModel program) async {
+    final docRef = await _firestore.collection('programs').add(program.toFirestore());
     return docRef.id;
   }
 
-  Future<void> updateService(String serviceId, Map<String, dynamic> data) async {
-    await _firestore.collection('services').doc(serviceId).update(data);
+  Future<void> updateProgram(String programId, Map<String, dynamic> data) async {
+    await _firestore.collection('programs').doc(programId).update(data);
   }
 
-  Future<void> deleteService(String serviceId) async {
-    await _firestore.collection('services').doc(serviceId).delete();
+  Future<void> deleteProgram(String programId) async {
+    await _firestore.collection('programs').doc(programId).delete();
+  }
+
+  // Service Types
+  Stream<List<ServiceTypeModel>> getServiceTypes() {
+    return _firestore
+        .collection('serviceTypes')
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => ServiceTypeModel.fromFirestore(doc)).toList());
+  }
+
+  Future<ServiceTypeModel?> getServiceType(String serviceTypeId) async {
+    final doc = await _firestore.collection('serviceTypes').doc(serviceTypeId).get();
+    if (doc.exists) {
+      return ServiceTypeModel.fromFirestore(doc);
+    }
+    return null;
+  }
+
+  Future<String> createServiceType(ServiceTypeModel serviceType) async {
+    final docRef = await _firestore.collection('serviceTypes').add(serviceType.toFirestore());
+    return docRef.id;
+  }
+
+  Future<void> updateServiceType(String serviceTypeId, Map<String, dynamic> data) async {
+    await _firestore.collection('serviceTypes').doc(serviceTypeId).update(data);
+  }
+
+  Future<void> deleteServiceType(String serviceTypeId) async {
+    await _firestore.collection('serviceTypes').doc(serviceTypeId).delete();
+  }
+
+  // Users
+  Stream<List<UserModel>> getAllUsers() {
+    return _firestore
+        .collection('users')
+        .snapshots()
+        .map((snapshot) {
+      final users = snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
+      // Sort in memory instead of using Firestore orderBy
+      users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return users;
+    });
+  }
+
+  Stream<List<UserModel>> getUsersByRole(UserRole role) {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: role.toString().split('.').last)
+        .snapshots()
+        .map((snapshot) {
+      final users = snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
+      // Sort in memory instead of using Firestore orderBy to avoid composite index
+      users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return users;
+    });
   }
 }

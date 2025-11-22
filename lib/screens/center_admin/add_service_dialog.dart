@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../models/service_model.dart';
+import '../../models/program_model.dart';
 import '../../models/trainer_model.dart';
 import '../../models/category_model.dart';
 import '../../providers/firestore_provider.dart';
@@ -10,7 +10,7 @@ import '../../services/storage_service.dart';
 import '../../utils/app_colors.dart';
 
 class AddServiceDialog extends ConsumerStatefulWidget {
-  final ServiceModel? existingService;
+  final ProgramModel? existingService;
   final List<TrainerModel> trainers;
   final String centerId;
 
@@ -32,9 +32,10 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
   final _priceController = TextEditingController();
   final _durationController = TextEditingController(text: '1');
   
-  ServiceType _serviceType = ServiceType.program;
+  String? _selectedServiceTypeId; // Link to ServiceTypeModel
   String? _selectedTrainer;
   String? _selectedCategoryId;
+  ProgramType _programType = ProgramType.regular; // Program type selector
   Set<DayOfWeek> _selectedDays = {};
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   int _durationMinutes = 60;
@@ -45,6 +46,11 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
   File? _headerImage;
   String? _existingHeaderImageUrl;
   bool _isUploading = false;
+  
+  // Nutrition-specific fields
+  int _mealsPerDay = 3;
+  int _daysPerWeek = 5;
+  int _subscriptionMonths = 3;
 
   @override
   void initState() {
@@ -59,9 +65,10 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
     _titleController.text = service.title;
     _descriptionController.text = service.description;
     _priceController.text = service.price.toString();
-    _serviceType = service.serviceType;
+    _selectedServiceTypeId = service.serviceTypeId;
     _selectedTrainer = service.trainer;
     _selectedCategoryId = service.categoryId;
+    _programType = service.programType;
     _selectedDays = service.weeklyDays.toSet();
     _durationMinutes = service.durationMinutes;
     _programStartDate = service.programStartDate;
@@ -70,6 +77,13 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
     _pricingDuration = service.pricingDuration;
     _existingHeaderImageUrl = service.headerImageUrl;
     _durationController.text = _pricingDuration.toString();
+    
+    // Initialize nutrition fields if it's a nutrition program
+    if (service.isNutritionProgram) {
+      _mealsPerDay = service.mealsPerDay ?? 3;
+      _daysPerWeek = service.daysPerWeek ?? 5;
+      _subscriptionMonths = service.subscriptionMonths ?? 3;
+    }
     
     if (service.startTime.isNotEmpty) {
       final parts = service.startTime.split(':');
@@ -119,6 +133,12 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
 
   String _formatTime(TimeOfDay time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  double _calculatePricePerMeal() {
+    final price = double.tryParse(_priceController.text) ?? 0;
+    final totalMeals = _mealsPerDay * _daysPerWeek * _subscriptionMonths * 4; // 4 weeks per month
+    return totalMeals > 0 ? price / totalMeals : 0;
   }
 
   void _calculateEndDate() {
@@ -174,7 +194,7 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                   const Icon(Icons.add_circle_outline, color: AppColors.white),
                   const SizedBox(width: 12),
                   Text(
-                    widget.existingService == null ? 'Add Service' : 'Edit Service',
+                    widget.existingService == null ? 'Add Program' : 'Edit Program',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -199,30 +219,6 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Service Type Selection
-                      _buildSectionTitle('Service Type'),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTypeChip(
-                              'Program',
-                              ServiceType.program,
-                              Icons.fitness_center,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildTypeChip(
-                              'Nutrition',
-                              ServiceType.nutrition,
-                              Icons.restaurant_menu,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
                       // Header Image
                       _buildSectionTitle('Header Photo'),
                       const SizedBox(height: 8),
@@ -254,15 +250,23 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                       ),
                       const SizedBox(height: 24),
                       
-                      // Category Selection
-                      _buildSectionTitle('Category *'),
+                      // Program Type Selection
+                      _buildSectionTitle('Program Type *'),
                       const SizedBox(height: 8),
-                      categoriesAsync.when(
-                        data: (categories) => _buildCategoryChips(categories),
-                        loading: () => const CircularProgressIndicator(),
-                        error: (_, __) => const Text('Error loading categories'),
-                      ),
+                      _buildProgramTypeSelector(),
                       const SizedBox(height: 24),
+                      
+                      // Category Selection (only for regular programs)
+                      if (_programType == ProgramType.regular) ...[
+                        _buildSectionTitle('Category *'),
+                        const SizedBox(height: 8),
+                        categoriesAsync.when(
+                          data: (categories) => _buildCategoryChips(categories),
+                          loading: () => const CircularProgressIndicator(),
+                          error: (_, __) => const Text('Error loading categories'),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                       
                       // Trainer Selection
                       _buildSectionTitle('Trainer *'),
@@ -270,8 +274,9 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                       _buildTrainerChips(),
                       const SizedBox(height: 24),
                       
-                      if (_serviceType == ServiceType.program) ...[
-                        // Weekly Schedule
+                      // Show different fields based on program type
+                      if (_programType == ProgramType.regular) ...[
+                        // Weekly Schedule (for regular programs)
                         _buildSectionTitle('Weekly Schedule *'),
                         const SizedBox(height: 8),
                         _buildDaySelector(),
@@ -305,6 +310,22 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                         _buildSectionTitle('Program Period *'),
                         const SizedBox(height: 12),
                         _buildDateSelector(),
+                        const SizedBox(height: 24),
+                      ] else ...[
+                        // Nutrition Program Fields
+                        _buildSectionTitle('Meals Per Day *'),
+                        const SizedBox(height: 8),
+                        _buildMealsPerDaySelector(),
+                        const SizedBox(height: 24),
+                        
+                        _buildSectionTitle('Days Per Week *'),
+                        const SizedBox(height: 8),
+                        _buildDaysPerWeekSelector(),
+                        const SizedBox(height: 24),
+                        
+                        _buildSectionTitle('Base Subscription Duration *'),
+                        const SizedBox(height: 8),
+                        _buildSubscriptionMonthsSelector(),
                         const SizedBox(height: 24),
                       ],
                       
@@ -368,6 +389,39 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
                           ),
                         ],
                       ),
+                      
+                      // Price breakdown for nutrition programs
+                      if (_programType == ProgramType.nutrition && _priceController.text.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Price Breakdown',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Total meals: ${_mealsPerDay * _daysPerWeek * _subscriptionMonths * 4} meals',
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                              Text(
+                                'Price per meal: BHD ${_calculatePricePerMeal().toStringAsFixed(2)}',
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -421,12 +475,41 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
     );
   }
 
-  Widget _buildTypeChip(String label, ServiceType type, IconData icon) {
-    final isSelected = _serviceType == type;
+  Widget _buildProgramTypeSelector() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildProgramTypeCard(
+            type: ProgramType.regular,
+            icon: Icons.fitness_center,
+            title: 'Regular Program',
+            description: 'Classes with schedule',
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildProgramTypeCard(
+            type: ProgramType.nutrition,
+            icon: Icons.restaurant_menu,
+            title: 'Nutrition Program',
+            description: 'Meal plans',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgramTypeCard({
+    required ProgramType type,
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    final isSelected = _programType == type;
     return InkWell(
-      onTap: () => setState(() => _serviceType = type),
+      onTap: () => setState(() => _programType = type),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.accent.withOpacity(0.1) : AppColors.secondary,
           borderRadius: BorderRadius.circular(12),
@@ -435,24 +518,129 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
             width: isSelected ? 2 : 1,
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
           children: [
             Icon(
               icon,
+              size: 32,
               color: isSelected ? AppColors.accent : AppColors.textSecondary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(height: 8),
             Text(
-              label,
+              title,
               style: TextStyle(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
                 color: isSelected ? AppColors.accent : AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMealsPerDaySelector() {
+    return Row(
+      children: [1, 2, 3].map((meals) {
+        final isSelected = _mealsPerDay == meals;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () => setState(() => _mealsPerDay = meals),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.accent : AppColors.secondary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.2),
+                    width: isSelected ? 2 : 1,
+                  ),
+                ),
+                child: Text(
+                  '$meals',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDaysPerWeekSelector() {
+    return Row(
+      children: [3, 5, 7].map((days) {
+        final isSelected = _daysPerWeek == days;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () => setState(() => _daysPerWeek = days),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.accent : AppColors.secondary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? AppColors.accent : AppColors.primary.withOpacity(0.2),
+                    width: isSelected ? 2 : 1,
+                  ),
+                ),
+                child: Text(
+                  '$days',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSubscriptionMonthsSelector() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [1, 2, 3, 6, 12].map((months) {
+        final isSelected = _subscriptionMonths == months;
+        return ChoiceChip(
+          label: Text(months == 1 ? '1 Month' : '$months Months'),
+          selected: isSelected,
+          onSelected: (selected) {
+            if (selected) {
+              setState(() => _subscriptionMonths = months);
+            }
+          },
+          selectedColor: AppColors.accent,
+          labelStyle: TextStyle(
+            color: isSelected ? Colors.white : AppColors.textPrimary,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -497,7 +685,13 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
   }
 
   Widget _buildCategoryChips(List<CategoryModel> categories) {
-    if (categories.isEmpty) {
+    // Filter out Packages and Nutrition categories
+    final filteredCategories = categories.where((category) {
+      final categoryName = category.name.toLowerCase();
+      return categoryName != 'packages' && categoryName != 'nutrition';
+    }).toList();
+    
+    if (filteredCategories.isEmpty) {
       return const Text(
         'No categories available',
         style: TextStyle(color: AppColors.textSecondary),
@@ -507,7 +701,7 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: categories.map((category) {
+      children: filteredCategories.map((category) {
         final isSelected = _selectedCategoryId == category.id;
         return ActionChip(
           label: Text(category.name),
@@ -744,7 +938,8 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (_selectedCategoryId == null) {
+    // Only validate category for regular programs
+    if (_programType == ProgramType.regular && _selectedCategoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a category')),
       );
@@ -758,7 +953,8 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
       return;
     }
     
-    if (_serviceType == ServiceType.program) {
+    // Validate schedule fields for regular programs only
+    if (_programType == ProgramType.regular) {
       if (_selectedDays.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select at least one day')),
@@ -778,21 +974,27 @@ class _AddServiceDialogState extends ConsumerState<AddServiceDialog> {
     
     final headerImageUrl = await _uploadHeaderImage();
     
-    final service = ServiceModel(
+    final service = ProgramModel(
       id: widget.existingService?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       centerId: widget.centerId,
-      categoryId: _selectedCategoryId!,
+      categoryId: _selectedCategoryId ?? 'nutrition', // Use 'nutrition' as default for nutrition programs
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim(),
       price: double.parse(_priceController.text.trim()),
       trainer: _selectedTrainer!,
       createdAt: widget.existingService?.createdAt ?? DateTime.now(),
-      serviceType: _serviceType,
-      weeklyDays: _selectedDays.toList()..sort((a, b) => a.index.compareTo(b.index)),
-      startTime: _formatTime(_startTime),
-      durationMinutes: _durationMinutes,
-      programStartDate: _programStartDate,
-      programEndDate: _programEndDate,
+      serviceTypeId: _selectedServiceTypeId ?? '',
+      programType: _programType,
+      weeklyDays: _programType == ProgramType.regular 
+          ? (_selectedDays.toList()..sort((a, b) => a.index.compareTo(b.index)))
+          : [],
+      startTime: _programType == ProgramType.regular ? _formatTime(_startTime) : '',
+      durationMinutes: _programType == ProgramType.regular ? _durationMinutes : 0,
+      programStartDate: _programType == ProgramType.regular ? _programStartDate : null,
+      programEndDate: _programType == ProgramType.regular ? _programEndDate : null,
+      mealsPerDay: _programType == ProgramType.nutrition ? _mealsPerDay : null,
+      daysPerWeek: _programType == ProgramType.nutrition ? _daysPerWeek : null,
+      subscriptionMonths: _programType == ProgramType.nutrition ? _subscriptionMonths : null,
       pricingPeriod: _pricingPeriod,
       pricingDuration: _pricingDuration,
       headerImageUrl: headerImageUrl,
