@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flow and Glow',
+      title: 'Flow and Grow',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       home: const AuthWrapper(),
