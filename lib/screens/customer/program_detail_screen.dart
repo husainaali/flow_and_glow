@@ -25,37 +25,117 @@ class ProgramDetailScreen extends ConsumerStatefulWidget {
 class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
   // Mock reviews for now
   List<ReviewModel> _reviews = [];
+  
+  // Subscription and review state
+  bool _isSubscribed = false;
+  bool _canAddReview = false;
+  bool _isCheckingSubscription = true;
 
   @override
   void initState() {
     super.initState();
     _loadReviews();
+    _checkSubscriptionStatus();
   }
 
-  void _loadReviews() {
-    // Mock reviews - replace with actual data later
-    _reviews = [
-      ReviewModel(
-        id: '1',
-        userId: 'user1',
-        userName: 'Sarah Johnson',
-        userImageUrl: '',
-        centerId: widget.program.centerId,
-        rating: 5.0,
-        comment: 'Discover your inner strength and tranquility at our sunrise wellness center.',
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      ReviewModel(
-        id: '2',
-        userId: 'user2',
-        userName: 'Mike Chen',
-        userImageUrl: '',
-        centerId: widget.program.centerId,
-        rating: 4.5,
-        comment: 'Discover your inner strength and tranquility at our sunrise wellness center. We offer a holistic approach to wellness...',
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      ),
-    ];
+  Future<void> _checkSubscriptionStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _isCheckingSubscription = false);
+      return;
+    }
+
+    try {
+      // Check if user has an active subscription for this program
+      final subscriptionsQuery = await FirebaseFirestore.instance
+          .collection('subscriptions')
+          .where('userId', isEqualTo: user.uid)
+          .where('packageId', isEqualTo: widget.program.id)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (subscriptionsQuery.docs.isNotEmpty) {
+        final subscription = SubscriptionModel.fromFirestore(subscriptionsQuery.docs.first);
+        setState(() {
+          _isSubscribed = true;
+          _canAddReview = true; // Subscribers can always add reviews
+        });
+
+        // Still check session completion for additional eligibility if needed
+        await _checkReviewEligibility(subscription);
+      }
+    } catch (e) {
+      print('Error checking subscription: $e');
+    } finally {
+      setState(() => _isCheckingSubscription = false);
+    }
+  }
+
+  Future<void> _checkReviewEligibility(SubscriptionModel subscription) async {
+    try {
+      // Get all sessions for this subscription
+      final sessionsQuery = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where('userId', isEqualTo: subscription.userId)
+          .where('subscriptionId', isEqualTo: subscription.id)
+          .get();
+
+      final sessions = sessionsQuery.docs
+          .map((doc) => SessionModel.fromFirestore(doc))
+          .toList();
+
+      if (sessions.isEmpty) return;
+
+      // Count completed sessions
+      final completedSessions = sessions.where((s) => s.status == SessionStatus.completed).length;
+      final totalSessions = sessions.length;
+      final completionPercentage = completedSessions / totalSessions;
+
+      // Check if 50% sessions are completed
+      if (completionPercentage >= 0.5) {
+        // Find the mid-session date
+        final sortedSessions = sessions..sort((a, b) => a.date.compareTo(b.date));
+        final midIndex = (totalSessions / 2).floor();
+        final midSession = sortedSessions[midIndex];
+
+        // Check if today is after the mid-session date
+        final today = DateTime.now();
+        final midSessionDate = DateTime(midSession.date.year, midSession.date.month, midSession.date.day);
+
+        if (today.isAfter(midSessionDate) || today.isAtSameMomentAs(midSessionDate)) {
+          setState(() => _canAddReview = true);
+        }
+      }
+    } catch (e) {
+      print('Error checking review eligibility: $e');
+    }
+  }
+
+  void _loadReviews() async {
+    try {
+      final reviewsQuery = await FirebaseFirestore.instance
+          .collection('reviews')
+          .where('centerId', isEqualTo: widget.program.centerId)
+          .get();
+
+      // Filter for program-specific reviews only (programId matches this program)
+      final programReviews = reviewsQuery.docs
+          .map((doc) => ReviewModel.fromFirestore(doc))
+          .where((review) => review.programId == widget.program.id)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Sort by date descending
+
+      // Take only the first 10 reviews
+      final limitedReviews = programReviews.take(10).toList();
+
+      if (mounted) {
+        setState(() => _reviews = limitedReviews);
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
+      // Keep empty reviews list on error
+    }
   }
 
   @override
@@ -412,6 +492,43 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
   }
 
   Widget _buildSubscribeButton() {
+    if (_isCheckingSubscription) {
+      return const SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_isSubscribed) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.green.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.green),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text(
+              'Already Subscribed',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -565,11 +682,125 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
     }
   }
 
-  Widget _buildReviewsSection() {
-    if (_reviews.isEmpty) {
-      return const SizedBox.shrink();
-    }
+  void _showAddReviewDialog() {
+    double rating = 5.0;
+    final commentController = TextEditingController();
 
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add Review'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Rate this program:'),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  return IconButton(
+                    icon: Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      setState(() => rating = index + 1.0);
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Share your experience...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (commentController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a comment')),
+                  );
+                  return;
+                }
+
+                await _saveReview(rating, commentController.text.trim());
+                Navigator.pop(context);
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveReview(double rating, String comment) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final userName = userDoc.exists 
+          ? (userDoc.data()?['name'] ?? 'Anonymous')
+          : 'Anonymous';
+
+      final review = ReviewModel(
+        id: '',
+        userId: user.uid,
+        userName: userName,
+        userImageUrl: '',
+        centerId: widget.program.centerId,
+        programId: widget.program.id,
+        rating: rating,
+        comment: comment,
+        createdAt: DateTime.now(),
+      );
+
+      await FirebaseFirestore.instance
+          .collection('reviews')
+          .add(review.toFirestore());
+
+      // Reload reviews to show the new one
+      _loadReviews();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Review added successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding review: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildReviewsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -584,27 +815,53 @@ class _ProgramDetailScreenState extends ConsumerState<ProgramDetailScreen> {
                 color: AppColors.textPrimary,
               ),
             ),
-            TextButton(
-              onPressed: () {
-                // TODO: Show all reviews
-              },
-              child: const Text('See All'),
+            Row(
+              children: [
+                if (_canAddReview)
+                  TextButton.icon(
+                    onPressed: _showAddReviewDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Review'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.accent,
+                    ),
+                  ),
+                
+              ],
             ),
           ],
         ),
         const SizedBox(height: 16),
-        
-        // Reviews List
-        SizedBox(
-          height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _reviews.length,
-            itemBuilder: (context, index) {
-              return _buildReviewCard(_reviews[index]);
-            },
+
+        if (_reviews.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text(
+                'No reviews yet',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          )
+        else
+          // Reviews List
+          SizedBox(
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _reviews.length,
+              itemBuilder: (context, index) {
+                return _buildReviewCard(_reviews[index]);
+              },
+            ),
           ),
-        ),
       ],
     );
   }

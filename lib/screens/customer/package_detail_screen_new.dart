@@ -35,7 +35,7 @@ class _PackageDetailScreenNewState extends ConsumerState<PackageDetailScreenNew>
       // Load all programs included in this package
       final programs = <ProgramModel>[];
       for (final programId in widget.package.programIds) {
-        final program = await _firestoreService.getProgram(programId);
+        final program = await _firestoreService.getProgram(widget.package.centerId, programId);
         if (program != null) {
           programs.add(program);
         }

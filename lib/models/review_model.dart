@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ReviewModel {
   final String id;
   final String centerId;
+  final String? programId;
   final String userId;
   final String userName;
   final String userImageUrl;
@@ -13,6 +14,7 @@ class ReviewModel {
   ReviewModel({
     required this.id,
     required this.centerId,
+    this.programId,
     required this.userId,
     required this.userName,
     this.userImageUrl = '',
@@ -25,6 +27,7 @@ class ReviewModel {
     return ReviewModel(
       id: id,
       centerId: map['centerId'] ?? '',
+      programId: map['programId'],
       userId: map['userId'] ?? '',
       userName: map['userName'] ?? '',
       userImageUrl: map['userImageUrl'] ?? '',
@@ -41,6 +44,7 @@ class ReviewModel {
     return ReviewModel(
       id: doc.id,
       centerId: data['centerId'] ?? '',
+      programId: data['programId'],
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
       userImageUrl: data['userImageUrl'] ?? '',
@@ -53,6 +57,7 @@ class ReviewModel {
   Map<String, dynamic> toMap() {
     return {
       'centerId': centerId,
+      'programId': programId,
       'userId': userId,
       'userName': userName,
       'userImageUrl': userImageUrl,
@@ -65,6 +70,7 @@ class ReviewModel {
   Map<String, dynamic> toFirestore() {
     return {
       'centerId': centerId,
+      'programId': programId,
       'userId': userId,
       'userName': userName,
       'userImageUrl': userImageUrl,

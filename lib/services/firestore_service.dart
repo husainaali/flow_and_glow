@@ -158,12 +158,19 @@ class FirestoreService {
         snapshot.docs.map((doc) => ProgramModel.fromFirestore(doc)).toList());
   }
 
-  Future<ProgramModel?> getProgram(String programId) async {
-    final doc = await _firestore.collection('programs').doc(programId).get();
-    if (doc.exists) {
-      return ProgramModel.fromFirestore(doc);
+  Future<ProgramModel?> getProgram(String centerId, String programId) async {
+    final center = await getCenter(centerId);
+    if (center == null) return null;
+
+    final programIndex = int.tryParse(programId);
+    if (programIndex == null || programIndex < 0 || programIndex >= center.programs.length) {
+      return null;
     }
-    return null;
+
+    return center.programs[programIndex].copyWith(
+      centerId: center.id,
+      centerName: center.name,
+    );
   }
 
   Future<String> createProgram(ProgramModel program) async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
 import '../../models/center_model.dart';
 import '../../models/package_model.dart';
@@ -77,14 +79,13 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
         // Load packages for this center
         final packages = await _firestoreService.getPackages(centerId: center.id).first;
         
-        // Load reviews for this center (mock data for now)
-        final reviews = _generateMockReviews(center.id);
+        // Load reviews for this center (center-level reviews only)
+        await _loadReviews(center.id);
         
         if (mounted) {
           setState(() {
             _currentCenter = center;
             _packages = packages;
-            _reviews = reviews;
             _selectedPackage = packages.isNotEmpty ? packages.first : null;
           });
         }
@@ -103,28 +104,148 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
     }
   }
 
-  // Generate mock reviews (replace with actual Firestore query later)
-  List<ReviewModel> _generateMockReviews(String centerId) {
-    return [
-      ReviewModel(
-        id: '1',
-        centerId: centerId,
-        userId: 'user1',
-        userName: 'Sarah Johnson',
-        rating: 5.0,
-        comment: 'Discover your inner strength and tranquility in our serene wellness center. We offer a holistic approach to wellness, focusing on mind, body, and spirit.',
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
+  Future<void> _loadReviews(String centerId) async {
+    try {
+      final reviewsQuery = await FirebaseFirestore.instance
+          .collection('reviews')
+          .where('centerId', isEqualTo: centerId)
+          .get();
+
+      // Filter for center-level reviews only (programId is null), sort, and limit
+      final centerReviews = reviewsQuery.docs
+          .map((doc) => ReviewModel.fromFirestore(doc))
+          .where((review) => review.programId == null)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Sort by date descending
+
+      // Take only the first 10 reviews
+      final limitedReviews = centerReviews.take(10).toList();
+
+      if (mounted) {
+        setState(() => _reviews = limitedReviews);
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
+      // Keep empty reviews list on error
+    }
+  }
+
+  void _showAddReviewDialog() {
+    double rating = 5.0;
+    final commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add Review'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Rate this center:'),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  return IconButton(
+                    icon: Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                    onPressed: () {
+                      setState(() => rating = index + 1.0);
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Share your experience...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (commentController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a comment')),
+                  );
+                  return;
+                }
+
+                await _saveReview(rating, commentController.text.trim());
+                Navigator.pop(context);
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
       ),
-      ReviewModel(
-        id: '2',
-        centerId: centerId,
-        userId: 'user2',
-        userName: 'Michael Chen',
-        rating: 4.0,
-        comment: 'Discover your inner strength and tranquility in our serene wellness center. We offer a holistic approach to wellness, focusing on mind, body, and spirit.',
-        createdAt: DateTime.now().subtract(const Duration(days: 10)),
-      ),
-    ];
+    );
+  }
+
+  Future<void> _saveReview(double rating, String comment) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final userName = userDoc.exists
+          ? (userDoc.data()?['name'] ?? 'Anonymous')
+          : 'Anonymous';
+
+      final review = ReviewModel(
+        id: '',
+        userId: user.uid,
+        userName: userName,
+        userImageUrl: '',
+        centerId: _currentCenter!.id,
+        programId: null, // Center-level review
+        rating: rating,
+        comment: comment,
+        createdAt: DateTime.now(),
+      );
+
+      await FirebaseFirestore.instance
+          .collection('reviews')
+          .add(review.toFirestore());
+
+      // Reload reviews to show the new one
+      await _loadReviews(_currentCenter!.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Review added successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding review: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -699,86 +820,119 @@ class _CenterDetailScreenState extends ConsumerState<CenterDetailScreen>
   }
 
   Widget _buildReviewsSection() {
-    if (_reviews.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Customer Reviews',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Customer Reviews',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _showAddReviewDialog,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Review'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accent,
+                  ),
+                ),
+              
+              ],
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _reviews.length,
-            itemBuilder: (context, index) {
-              final review = _reviews[index];
-              return Container(
-                width: 280,
-                margin: const EdgeInsets.only(right: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+
+        if (_reviews.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text(
+                'No reviews yet',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 16,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: List.generate(5, (starIndex) {
-                        return Icon(
-                          starIndex < review.rating.floor()
-                              ? Icons.star
-                              : Icons.star_border,
-                          color: const Color(0xFFFFB800),
-                          size: 16,
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      review.userName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _reviews.length,
+              itemBuilder: (context, index) {
+                final review = _reviews[index];
+                return Container(
+                  width: 280,
+                  margin: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: Text(
-                        review.comment,
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: List.generate(5, (starIndex) {
+                          return Icon(
+                            starIndex < review.rating.floor()
+                                ? Icons.star
+                                : Icons.star_border,
+                            color: const Color(0xFFFFB800),
+                            size: 16,
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        review.userName,
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          height: 1.4,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
                         ),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Text(
+                          review.comment,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            height: 1.4,
+                          ),
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
