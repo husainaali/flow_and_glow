@@ -96,4 +96,49 @@ class AuthService {
   Future<void> signOut() async {
     await _auth.signOut();
   }
+
+  // Update user profile
+  Future<void> updateUserProfile({
+    required String uid,
+    String? name,
+    String? phoneNumber,
+    String? profileImageUrl,
+  }) async {
+    try {
+      final Map<String, dynamic> updates = {};
+      if (name != null) updates['name'] = name;
+      if (phoneNumber != null) updates['phoneNumber'] = phoneNumber;
+      if (profileImageUrl != null) updates['profileImageUrl'] = profileImageUrl;
+
+      if (updates.isNotEmpty) {
+        await _firestore.collection('users').doc(uid).update(updates);
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Update email
+  Future<void> updateEmail(String newEmail) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.verifyBeforeUpdateEmail(newEmail);
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Update password
+  Future<void> updatePassword(String newPassword) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.updatePassword(newPassword);
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

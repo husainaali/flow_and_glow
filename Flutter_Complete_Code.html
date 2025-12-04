@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow and grow - Complete Flutter Code</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: #ffffff;
+            color: #24292e;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 { color: #24292e; border-bottom: 1px solid #eaecef; padding-bottom: 10px; }
+        h2 { color: #24292e; margin-top: 40px; border-bottom: 1px solid #eaecef; padding-bottom: 8px; }
+        h3 { color: #0366d6; }
+        pre {
+            background-color: #f6f8fa !important;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 14px;
+        }
+        .hljs {
+            background-color: #f6f8fa !important;
+            color: #24292e;
+        }
+        a { color: #0366d6; }
+        hr { border: none; border-top: 1px solid #eaecef; margin: 30px 0; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+<h1>Flow and grow - Complete Flutter Code</h1>
+
+<h2>Table of Contents</h2>
+<ul>
+    <li><a href="#main-app-structure">Main App Structure</a></li>
+    <li><a href="#configuration-files">Configuration Files</a></li>
+    <li><a href="#utils-and-themes">Utils and Themes</a></li>
+    <li><a href="#models">Models</a></li>
+    <li><a href="#providers">Providers</a></li>
+    <li><a href="#services">Services</a></li>
+    <li><a href="#authentication-screens">Authentication Screens</a></li>
+    <li><a href="#customer-screens">Customer Screens</a></li>
+    <li><a href="#center-admin-screens">Center Admin Screens</a></li>
+    <li><a href="#super-admin-screens">Super Admin Screens</a></li>
+    <li><a href="#widgets">Widgets</a></li>
+    <li><a href="#testing">Testing</a></li>
+</ul>
+
+<hr>
+
+<h2 id="main-app-structure">Main App Structure</h2>
+
+<h3>lib/main.dart</h3>
+<p>Entry point of the Flutter application. Initializes Firebase and sets up role-based navigation.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'utils/app_theme.dart';
+import 'screens/auth/onboarding_screen.dart';
+import 'providers/auth_provider.dart';
+import 'screens/customer/customer_home_screen.dart';
+import 'screens/center_admin/center_admin_dashboard.dart';
+import 'screens/super_admin/super_admin_dashboard.dart';
+import 'models/user_model.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  // Note: You need to configure Firebase first
+  // Run: flutterfire configure (install flutterfire_cli first)
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+  }
+  
+  runApp(const ProviderScope(child: MyApp()));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flow and Grow',
+      theme: AppTheme.lightTheme,
+      debugShowCheckedModeBanner: false,
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+class AuthWrapper extends ConsumerWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      data: (user) {
+        if (user == null) {
+          return const OnboardingScreen();
+        }
+        
+        final currentUserAsync = ref.watch(currentUserProvider);
+        return currentUserAsync.when(
+          data: (userData) {
+            if (userData == null) {
+              return const OnboardingScreen();
+            }
+            switch (userData.role) {
+              case UserRole.customer:
+                return const CustomerHomeScreen();
+              case UserRole.centerAdmin:
+                return const CenterAdminDashboard();
+              case UserRole.superAdmin:
+                return const SuperAdminDashboard();
+            }
+          },
+          loading: () => const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+          error: (_, __) => const OnboardingScreen(),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const OnboardingScreen(),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="configuration-files">Configuration Files</h2>
+
+<h3>lib/firebase_options.dart</h3>
+<p>Firebase configuration settings for Android and iOS platforms.</p>
+<pre><code class="language-dart">// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return android;
+      case TargetPlatform.iOS:
+        return ios;
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyA3DVEwv3fwjkQI54rGA6HB5xHnPUYUkp8',
+    appId: '1:520813948225:android:497d909c9e49ce2d2385c0',
+    messagingSenderId: '520813948225',
+    projectId: 'flow-and-grow-feddd',
+    storageBucket: 'flow-and-grow-feddd.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyASRymNqmQYfG4DSfPDmibWez7IKtYEGUc',
+    appId: '1:520813948225:ios:259465bb2d8ad4252385c0',
+    messagingSenderId: '520813948225',
+    projectId: 'flow-and-grow-feddd',
+    storageBucket: 'flow-and-grow-feddd.firebasestorage.app',
+    iosBundleId: 'com.example.flowAndgrow',
+  );
+}</code></pre>
+
+<hr>
+
+<h2 id="utils-and-themes">Utils and Themes</h2>
+
+<h3>lib/utils/app_colors.dart</h3>
+<p>Centralized color scheme with warm, earthy tones for the wellness app.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+
+class AppColors {
+  // Primary colors from design
+  static const Color primary = Color(0xFFB8907D); // Tan/beige brown
+  static const Color secondary = Color(0xFFF5E6DC); // Light beige
+  static const Color accent = Color(0xFFE89B8A); // Coral/salmon
+  static const Color background = Color(0xFFFAF4F0); // Off-white/cream
+  
+  // Text colors
+  static const Color textPrimary = Color(0xFF6B4E3D); // Dark brown
+  static const Color textSecondary = Color(0xFF9B8577); // Medium brown
+  static const Color textLight = Color(0xFFB8A99A); // Light brown
+  
+  // UI colors
+  static const Color white = Color(0xFFFFFFFF);
+  static const Color black = Color(0xFF000000);
+  static const Color error = Color(0xFFE57373);
+  static const Color success = Color(0xFF81C784);
+  
+  // Card and surface colors
+  static const Color cardBackground = Color(0xFFFFFFFF);
+  static const Color divider = Color(0xFFE8DDD4);
+}</code></pre>
+
+<h3>lib/utils/app_theme.dart</h3>
+<p>Material Design 3 theme configuration with custom styling.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import 'app_colors.dart';
+
+class AppTheme {
+  static ThemeData get lightTheme {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.light(
+        primary: AppColors.primary,
+        secondary: AppColors.accent,
+        surface: AppColors.background,
+        error: AppColors.error,
+      ),
+      scaffoldBackgroundColor: AppColors.background,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        iconTheme: IconThemeData(color: AppColors.textPrimary),
+        titleTextStyle: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          foregroundColor: AppColors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          elevation: 0,
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: AppColors.accent, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        hintStyle: const TextStyle(color: AppColors.textLight),
+      ),
+      cardTheme: CardThemeData(
+        color: AppColors.cardBackground,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+        displayMedium: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+        displaySmall: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+        headlineMedium: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+        bodyLarge: TextStyle(
+          fontSize: 16,
+          color: AppColors.textSecondary,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: 14,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="models">Models</h2>
+
+<h3>lib/models/user_model.dart</h3>
+<p>User data model with role-based access control.</p>
+<pre><code class="language-dart">import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum UserRole { customer, centerAdmin, superAdmin }
+
+class UserModel {
+  final String uid;
+  final String email;
+  final String name;
+  final UserRole role;
+  final String? centerId; // For center admins
+  final DateTime createdAt;
+
+  UserModel({
+    required this.uid,
+    required this.email,
+    required this.name,
+    required this.role,
+    this.centerId,
+    required this.createdAt,
+  });
+
+  factory UserModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map&lt;String, dynamic&gt;;
+    return UserModel(
+      uid: doc.id,
+      email: data['email'] ?? '',
+      name: data['name'] ?? '',
+      role: UserRole.values.firstWhere(
+        (e) => e.toString() == 'UserRole.${data['role']}',
+        orElse: () => UserRole.customer,
+      ),
+      centerId: data['centerId'],
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+    );
+  }
+
+  Map&lt;String, dynamic&gt; toFirestore() {
+    return {
+      'email': email,
+      'name': name,
+      'role': role.toString().split('.').last,
+      'centerId': centerId,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="providers">Providers</h2>
+
+<h3>lib/providers/auth_provider.dart</h3>
+<p>Authentication state management using Riverpod.</p>
+<pre><code class="language-dart">import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/user_model.dart';
+import '../services/auth_service.dart';
+
+final authServiceProvider = Provider&lt;AuthService&gt;((ref) => AuthService());
+
+final authStateProvider = StreamProvider&lt;User?&gt;((ref) {
+  return ref.watch(authServiceProvider).authStateChanges;
+});
+
+final currentUserProvider = FutureProvider&lt;UserModel?&gt;((ref) async {
+  final authState = ref.watch(authStateProvider);
+  
+  return authState.when(
+    data: (user) async {
+      if (user != null) {
+        return await ref.read(authServiceProvider).getUserData(user.uid);
+      }
+      return null;
+    },
+    loading: () => null,
+    error: (_, __) => null,
+  );
+});</code></pre>
+
+<hr>
+
+<h2 id="services">Services</h2>
+
+<h3>lib/services/auth_service.dart</h3>
+<p>Firebase Authentication service for login, registration, and user management.</p>
+<pre><code class="language-dart">import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
+
+class AuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Stream&lt;User?&gt; get authStateChanges => _auth.authStateChanges();
+
+  Future&lt;UserModel?&gt; getUserData(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return UserModel.fromFirestore(doc);
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to get user data: $e');
+    }
+  }
+
+  Future&lt;UserModel?&gt; signIn(String email, String password) async {
+    try {
+      final UserCredential result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      return await getUserData(result.user!.uid);
+    } catch (e) {
+      throw Exception('Failed to sign in: $e');
+    }
+  }
+
+  Future&lt;UserModel?&gt; register({
+    required String email,
+    required String password,
+    required String name,
+    required UserRole role,
+  }) async {
+    try {
+      final UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = UserModel(
+        uid: result.user!.uid,
+        email: email,
+        name: name,
+        role: role,
+        createdAt: DateTime.now(),
+      );
+
+      await _firestore.collection('users').doc(user.uid).set(user.toFirestore());
+      
+      return user;
+    } catch (e) {
+      throw Exception('Failed to register: $e');
+    }
+  }
+
+  Future&lt;void&gt; signOut() async {
+    try {
+      await _auth.signOut();
+    } catch (e) {
+      throw Exception('Failed to sign out: $e');
+    }
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="authentication-screens">Authentication Screens</h2>
+
+<h3>lib/screens/auth/onboarding_screen.dart</h3>
+<p>Welcome screen with app introduction and page navigation.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../../utils/app_colors.dart';
+import 'login_screen.dart';
+
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
+
+  @override
+  State&lt;OnboardingScreen&gt; createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State&lt;OnboardingScreen&gt; {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  final List&lt;OnboardingPage&gt; _pages = [
+    OnboardingPage(
+      title: 'Find your inner balance',
+      description: 'Embrace tranquility and strength. Join our community to nurture your body and soul',
+      icon: Image.asset(
+        'assets/images/flowandgrow_landing1.png',
+        fit: BoxFit.contain,
+      ),
+    ),
+    OnboardingPage(
+      title: 'Discover wellness centers',
+      description: 'Connect with the best yoga, pilates, and meditation centers near you',
+      icon: Image.asset(
+        'assets/images/flowandgrow_landing2.png',
+        fit: BoxFit.contain,
+      ),
+    ),
+    OnboardingPage(
+      title: 'Subscribe and grow',
+      description: 'Choose flexible monthly or yearly packages that fit your lifestyle',
+      icon: Image.asset(
+        'assets/images/flowandgrow_landing3.png',
+        fit: BoxFit.contain,
+      ),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemCount: _pages.length,
+                itemBuilder: (context, index) {
+                  return _buildPage(_pages[index]);
+                },
+              ),
+            ),
+            _buildPageIndicator(),
+            const SizedBox(height: 32),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (_currentPage == _pages.length - 1) {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      );
+                    } else {
+                      _pageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    }
+                  },
+                  child: Text(_currentPage == _pages.length - 1 ? 'Get Start' : 'Next'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPage(OnboardingPage page) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 200,
+            height: 200,
+            child: Center(
+              child: page.icon,
+            ),
+          ),
+          const SizedBox(height: 48),
+          Text(
+            page.title,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            page.description,
+            style: const TextStyle(
+              fontSize: 16,
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageIndicator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        _pages.length,
+        (index) => Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _currentPage == index ? AppColors.accent : AppColors.textLight,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+}
+
+class OnboardingPage {
+  final String title;
+  final String description;
+  final Widget icon;
+
+  OnboardingPage({
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+}</code></pre>
+
+<h3>lib/screens/auth/login_screen.dart</h3>
+<p>Combined login and registration screen with animated toggle.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../utils/app_colors.dart';
+import '../../providers/auth_provider.dart';
+import '../../models/user_model.dart';
+import '../customer/customer_home_screen.dart';
+import '../center_admin/center_admin_dashboard.dart';
+import '../super_admin/super_admin_dashboard.dart';
+
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  ConsumerState&lt;LoginScreen&gt; createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState&lt;LoginScreen&gt; {
+  final _formKey = GlobalKey&lt;FormState&gt;();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _rememberMe = false;
+  bool _isLoading = false;
+  bool _isLoginSelected = true;
+
+  // Registration form controllers and state
+  final _registerNameController = TextEditingController();
+  final _registerEmailController = TextEditingController();
+  final _registerPasswordController = TextEditingController();
+  final _registerConfirmPasswordController = TextEditingController();
+  UserRole _registerSelectedRole = UserRole.customer;
+  bool _isRegisterLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                // Logo
+                Container(
+                  width: 180,
+                  height: 180,
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/Flowgrow.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 64),
+                // Tab selector with animated toggle
+                Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: AppColors.primary),
+                  ),
+                  child: Stack(
+                    children: [
+                      AnimatedAlign(
+                        alignment: _isLoginSelected
+                            ? Alignment.centerLeft
+                            : Alignment.centerRight,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                        child: FractionallySizedBox(
+                          widthFactor: 0.5,
+                          child: Container(
+                            margin: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(30),
+                              onTap: () {
+                                if (!_isLoginSelected) {
+                                  setState(() {
+                                    _isLoginSelected = true;
+                                  });
+                                }
+                              },
+                              child: Center(
+                                child: Text(
+                                  'Login',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: _isLoginSelected
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(30),
+                              onTap: () {
+                                if (_isLoginSelected) {
+                                  setState(() {
+                                    _isLoginSelected = false;
+                                  });
+                                }
+                              },
+                              child: Center(
+                                child: Text(
+                                  'Register',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: !_isLoginSelected
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Animated login / register forms
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) {
+                    final offsetTween = Tween&lt;Offset&gt;(
+                      begin: const Offset(0.0, 0.08),
+                      end: Offset.zero,
+                    );
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: offsetTween.animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: _isLoginSelected
+                      ? _buildLoginFormFields()
+                      : _buildRegisterFormFields(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginFormFields() {
+    return Column(
+      key: const ValueKey('login_form'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            hintText: 'User Name',
+            prefixIcon: Icon(Icons.person_outline, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your email';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _passwordController,
+          obscureText: true,
+          decoration: const InputDecoration(
+            hintText: 'Password',
+            prefixIcon: Icon(Icons.lock_outline, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your password';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Checkbox(
+              value: _rememberMe,
+              onChanged: (value) {
+                setState(() {
+                  _rememberMe = value ?? false;
+                });
+              },
+              activeColor: AppColors.accent,
+            ),
+            const Text(
+              'Remember me',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _handleLogin,
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation&lt;Color&gt;(AppColors.white),
+                    ),
+                  )
+                : const Text('Login'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: () {
+            // TODO: Implement forgot password
+          },
+          child: const Text(
+            'Forgot password?',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRegisterFormFields() {
+    return Column(
+      key: const ValueKey('register_form'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _registerNameController,
+          decoration: const InputDecoration(
+            hintText: 'Full Name',
+            prefixIcon: Icon(Icons.person_outline, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your name';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _registerEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            hintText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your email';
+            }
+            if (!value.contains('@')) {
+              return 'Please enter a valid email';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _registerPasswordController,
+          obscureText: true,
+          decoration: const InputDecoration(
+            hintText: 'Password',
+            prefixIcon: Icon(Icons.lock_outline, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter a password';
+            }
+            if (value.length &lt; 6) {
+              return 'Password must be at least 6 characters';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _registerConfirmPasswordController,
+          obscureText: true,
+          decoration: const InputDecoration(
+            hintText: 'Confirm Password',
+            prefixIcon: Icon(Icons.lock_outline, color: AppColors.textLight),
+          ),
+          validator: (value) {
+            if (value != _registerPasswordController.text) {
+              return 'Passwords do not match';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'I am a:',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildRoleOption(
+                'Customer',
+                UserRole.customer,
+                Icons.person,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildRoleOption(
+                'Center Admin',
+                UserRole.centerAdmin,
+                Icons.business,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isRegisterLoading ? null : _handleRegister,
+            child: _isRegisterLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation&lt;Color&gt;(AppColors.white),
+                    ),
+                  )
+                : const Text('Register'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleOption(String label, UserRole role, IconData icon) {
+    final isSelected = _registerSelectedRole == role;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _registerSelectedRole = role;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accent.withOpacity(0.1) : AppColors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.accent : AppColors.primary,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? AppColors.accent : AppColors.textLight,
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppColors.accent : AppColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future&lt;void&gt; _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isRegisterLoading = true;
+    });
+
+    try {
+      final authService = ref.read(authServiceProvider);
+      final user = await authService.register(
+        email: _registerEmailController.text.trim(),
+        password: _registerPasswordController.text,
+        name: _registerNameController.text.trim(),
+        role: _registerSelectedRole,
+      );
+
+      if (user != null && mounted) {
+        Widget homeScreen;
+        switch (user.role) {
+          case UserRole.customer:
+            homeScreen = const CustomerHomeScreen();
+            break;
+          case UserRole.centerAdmin:
+            homeScreen = const CenterAdminDashboard();
+            break;
+          case UserRole.superAdmin:
+            homeScreen = const SuperAdminDashboard();
+            break;
+        }
+        
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => homeScreen),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRegisterLoading = false;
+        });
+      }
+    }
+  }
+
+  Future&lt;void&gt; _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authService = ref.read(authServiceProvider);
+      final user = await authService.signIn(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
+      if (user != null && mounted) {
+        Widget destination;
+        switch (user.role) {
+          case UserRole.customer:
+            destination = const CustomerHomeScreen();
+            break;
+          case UserRole.centerAdmin:
+            destination = const CenterAdminDashboard();
+            break;
+          case UserRole.superAdmin:
+            destination = const SuperAdminDashboard();
+            break;
+        }
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => destination),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _registerNameController.dispose();
+    _registerEmailController.dispose();
+    _registerPasswordController.dispose();
+    _registerConfirmPasswordController.dispose();
+    super.dispose();
+  }
+}
+
+class _AnimatedField extends StatelessWidget {
+  final int delayMilliseconds;
+  final Widget child;
+
+  const _AnimatedField({
+    required this.delayMilliseconds,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder&lt;double&gt;(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 250 + delayMilliseconds),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 12 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}</code></pre>
+
+<h3>lib/screens/auth/splash_screen.dart</h3>
+<p>App launch screen with logo display.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../../utils/app_colors.dart';
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.secondary,
+      body: Center(
+        child: Image.asset(
+          'assets/images/FlowgrowLogo.png',
+          width: 220,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="customer-screens">Customer Screens</h2>
+
+<h3>lib/screens/customer/customer_home_screen.dart</h3>
+<p>Main dashboard for customer users.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../../utils/app_colors.dart';
+
+class CustomerHomeScreen extends StatelessWidget {
+  const CustomerHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Flow & grow'),
+        centerTitle: true,
+      ),
+      body: const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome back!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Find your perfect wellness experience',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: 24),
+            Center(
+              child: Text(
+                'Customer Dashboard - Coming Soon',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="center-admin-screens">Center Admin Screens</h2>
+
+<h3>lib/screens/center_admin/center_admin_dashboard.dart</h3>
+<p>Main dashboard for center administrators.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../../utils/app_colors.dart';
+
+class CenterAdminDashboard extends StatelessWidget {
+  const CenterAdminDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Center Admin Dashboard'),
+        centerTitle: true,
+      ),
+      body: const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Manage Your Center',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 24),
+            Center(
+              child: Text(
+                'Center Admin Dashboard - Coming Soon',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="super-admin-screens">Super Admin Screens</h2>
+
+<h3>lib/screens/super_admin/super_admin_dashboard.dart</h3>
+<p>Administrative dashboard for platform management.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../../utils/app_colors.dart';
+
+class SuperAdminDashboard extends StatelessWidget {
+  const SuperAdminDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Super Admin Dashboard'),
+        centerTitle: true,
+      ),
+      body: const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Platform Management',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 24),
+            Center(
+              child: Text(
+                'Super Admin Dashboard - Coming Soon',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="widgets">Widgets</h2>
+
+<h3>lib/widgets/nutrition_program_form_example.dart</h3>
+<p>Example nutrition program form widget.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import '../utils/app_colors.dart';
+
+class NutritionProgramFormExample extends StatefulWidget {
+  const NutritionProgramFormExample({super.key});
+
+  @override
+  State&lt;NutritionProgramFormExample&gt; createState() => _NutritionProgramFormExampleState();
+}
+
+class _NutritionProgramFormExampleState extends State&lt;NutritionProgramFormExample&gt; {
+  final _formKey = GlobalKey&lt;FormState&gt;();
+  final _programNameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  String _selectedCategory = 'Weight Loss';
+  bool _includesMealPlan = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Create Nutrition Program'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _programNameController,
+                decoration: const InputDecoration(
+                  hintText: 'Program Name',
+                  prefixIcon: Icon(Icons.restaurant, color: AppColors.textLight),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter program name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Program Description',
+                  prefixIcon: Icon(Icons.description, color: AppColors.textLight),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter description';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField&lt;String&gt;(
+                value: _selectedCategory,
+                decoration: const InputDecoration(
+                  hintText: 'Category',
+                  prefixIcon: Icon(Icons.category, color: AppColors.textLight),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Weight Loss', child: Text('Weight Loss')),
+                  DropdownMenuItem(value: 'Muscle Gain', child: Text('Muscle Gain')),
+                  DropdownMenuItem(value: 'Maintenance', child: Text('Maintenance')),
+                  DropdownMenuItem(value: 'Athletic', child: Text('Athletic')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategory = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                title: const Text('Includes Meal Plan'),
+                value: _includesMealPlan,
+                onChanged: (value) {
+                  setState(() {
+                    _includesMealPlan = value!;
+                  });
+                },
+                activeColor: AppColors.accent,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Program created successfully!')),
+                      );
+                    }
+                  },
+                  child: const Text('Create Program'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _programNameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="testing">Testing</h2>
+
+<h3>test/widget_test.dart</h3>
+<p>Basic widget test setup.</p>
+<pre><code class="language-dart">import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:flow_and_grow/main.dart';
+
+void main() {
+  testWidgets('App smoke test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+
+    expect(find.text('Find your inner balance'), findsOneWidget);
+  });
+}</code></pre>
+
+<hr>
+
+<h2>Summary</h2>
+
+<p>This complete Flutter code documentation includes all the core files for the Flow and grow wellness app. The application features:</p>
+
+<ul>
+    <li><strong>Firebase Integration</strong>: Authentication and Firestore database</li>
+    <li><strong>Riverpod State Management</strong>: Modern state handling with providers</li>
+    <li><strong>Role-Based Access</strong>: Customer, Center Admin, and Super Admin roles</li>
+    <li><strong>Material Design 3</strong>: Modern UI with custom light theme</li>
+    <li><strong>Responsive Authentication</strong>: Combined login/register screen with animations</li>
+    <li><strong>Clean Architecture</strong>: Proper separation of concerns with models, services, and screens</li>
+</ul>
+
+<p>The codebase is structured for scalability with clear separation between UI, business logic, and data layers. The warm, earthy color scheme creates a calming wellness-focused user experience.</p>
+
+<script>hljs.highlightAll();</script>
+</body>
+</html>

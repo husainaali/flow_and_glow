@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
+import 'edit_profile_screen.dart';
+import 'notifications_screen.dart';
+import 'payment_methods_screen.dart';
+import 'help_support_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -61,31 +66,66 @@ class ProfileScreen extends ConsumerWidget {
                   context,
                   icon: Icons.person_outline,
                   title: 'Edit Profile',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const EditProfileScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildProfileOption(
                   context,
                   icon: Icons.notifications_active_outlined,
                   title: 'Notifications',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildProfileOption(
                   context,
                   icon: Icons.payment_outlined,
                   title: 'Payment Methods',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PaymentMethodsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildProfileOption(
                   context,
                   icon: Icons.help_outline,
                   title: 'Help & Support',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const HelpSupportScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildProfileOption(
                   context,
                   icon: Icons.settings_outlined,
                   title: 'Settings',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 24),
                 SizedBox(

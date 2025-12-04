@@ -6,6 +6,8 @@ class UserModel {
   final String uid;
   final String email;
   final String name;
+  final String? phoneNumber;
+  final String? profileImageUrl;
   final UserRole role;
   final String? centerId; // For center admins
   final DateTime createdAt;
@@ -14,6 +16,8 @@ class UserModel {
     required this.uid,
     required this.email,
     required this.name,
+    this.phoneNumber,
+    this.profileImageUrl,
     required this.role,
     this.centerId,
     required this.createdAt,
@@ -25,6 +29,8 @@ class UserModel {
       uid: doc.id,
       email: data['email'] ?? '',
       name: data['name'] ?? '',
+      phoneNumber: data['phoneNumber'],
+      profileImageUrl: data['profileImageUrl'],
       role: UserRole.values.firstWhere(
         (e) => e.toString() == 'UserRole.${data['role']}',
         orElse: () => UserRole.customer,
@@ -38,6 +44,8 @@ class UserModel {
     return {
       'email': email,
       'name': name,
+      'phoneNumber': phoneNumber,
+      'profileImageUrl': profileImageUrl,
       'role': role.toString().split('.').last,
       'centerId': centerId,
       'createdAt': Timestamp.fromDate(createdAt),
